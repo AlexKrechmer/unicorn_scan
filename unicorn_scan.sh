@@ -138,7 +138,7 @@ echo -e "${MAGENTA}
 ====================================================
                 __               __           
    ____ _____  / /_  __  _______/ /____  _____
-  / __ \`/ __ \/ __ \/ / / / ___/ __/ _ \/ ___/
+  / __ `/ __ \/ __ \/ / / / ___/ __/ _ \/ ___/
  / /_/ / /_/ / /_/ / /_/ (__  ) /_/  __/ /    
  \__, /\____/_.___/\__,_/____/\__/\___/_/     
 /____/                                         
@@ -152,13 +152,15 @@ echo "Gobuster Directory Scan" >> "$REPORT_DIR/report.txt"
 if [ -s "$HTTPX_OUTPUT" ]; then
     URLS=$(awk '{print $1}' "$HTTPX_OUTPUT" | sort -u)
     for URL in $URLS; do
-        GOBUSTER_FILE="$REPORT_DIR/gobuster_$(echo $URL | sed 's/[:\/]/_/g')"
-        gobuster dir -u "$URL" -w /usr/share/wordlists/dirb/common.txt -t 10 -o "$GOBUSTER_FILE"
-        cat "$GOBUSTER_FILE" >> "$REPORT_DIR/report.txt"
+        for WORDLIST in "${DEFAULT_WORDLISTS[@]}"; do
+            WL_NAME=$(basename "$WORDLIST")
+            GOBUSTER_FILE="$REPORT_DIR/gobuster_${WL_NAME}_$(echo $URL | sed 's/[:\/]/_/g').txt"
+            echo "[*] Running Gobuster on $URL with $WL_NAME"
+            gobuster dir -u "$URL" -w "$WORDLIST" -t 10 -o "$GOBUSTER_FILE"
+            cat "$GOBUSTER_FILE" >> "$REPORT_DIR/report.txt"
+            echo "--------------------" >> "$REPORT_DIR/report.txt"
+        done
     done
 else
     echo "[!] No HTTP URLs found. Skipping Gobuster."
 fi
-
-echo "===================="
-echo "[*] Unicorn Scan Complete. Full report: $REPORT_DIR/report.txt"
