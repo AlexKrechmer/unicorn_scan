@@ -6,6 +6,18 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPORT_DIR="reports/unicorn_report_${TARGET}_${TIMESTAMP}"
 mkdir -p "$REPORT_DIR"
 
+# Default wordlists for Gobuster
+DEFAULT_WORDLISTS=(
+    "$HOME/Documents/gobuster/SecLists/Discovery/Web-Content/raft-small-words.txt"
+    "$HOME/Documents/gobuster/SecLists/Discovery/Web-Content/quickhits.txt"
+    "$HOME/Documents/gobuster/SecLists/Discovery/Web-Content/raft-medium-words.txt"
+)
+
+# Loop through wordlists
+for WORDLIST in "${DEFAULT_WORDLISTS[@]}"; do
+    gobuster dir -u "$TARGET" -w "$WORDLIST" -o "$REPORT_DIR/$(basename "$WORDLIST")_$(date +%H%M%S).txt"
+done
+
 # ===== Colors =====
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
