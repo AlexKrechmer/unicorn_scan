@@ -2,7 +2,7 @@
 # unicorn_scan.sh - Automated Recon Script
 # By Alex 🦄
 # ====================
-# Stable, feature-complete version
+# Stable, feature-complete version with readable Gobuster banner
 # ====================
 
 # ====================
@@ -107,7 +107,7 @@ echo -e "${PURPLE}====================================================${NC}"
 
 HTTPX_OUTPUT="$REPORT_DIR/httpx.txt"
 if command -v httpx >/dev/null 2>&1 && [ -s "$NMAP_OUTPUT" ]; then
-    grep -E "open.*http" "$NMAP_OUTPUT" | awk '{print $1}' | cut -d/ -f1 | while read -r port; do
+    grep 'open' "$NMAP_OUTPUT" | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
         echo "http://$TARGET:$port"
     done | httpx -silent -o "$HTTPX_OUTPUT" || touch "$HTTPX_OUTPUT"
     echo "[*] HTTPX results saved to $HTTPX_OUTPUT"
@@ -123,19 +123,20 @@ cat "$HTTPX_OUTPUT" >> "$REPORT_DIR/report.txt"
 # Gobuster Phase
 # ====================
 echo -e "${GREEN}====================================================${NC}"
-echo -e "${GREEN}  .,-:::::/      ...     :::::::.   ...    ::: .::::::.::::::::::::.,:::::: :::::::..   ${NC}"
-echo -e "${GREEN},;;-'````'    .;;;;;;;.   ;;;'';;'  ;;     ;;;;;;`    \`;;;;;;;;'''';;;;'''' ;;;;``;;;;  ${NC}"
-echo -e "${GREEN}[[[   [[[[[[/,[[     \[[, [[[__[[\\.[['     [[['[==/[[[[,    [[      [[cccc   [[[,/[[['   ${NC}"
-echo -e "${GREEN}\"$$c.    \"$$ $$$,     $$$ $$\"\"\"\"Y$$$$      $$$  '''    $    $$      $$\"\"\"\"   $$$$$$c    ${NC}"
-echo -e "${GREEN} \`Y8bo,,,o88o\"888,_ _,88P_88o,,od8P88    .d888 88b    dP    88,     888oo,__ 888b \"88bo, ${NC}"
-echo -e "${GREEN}   `'YMUP\"YMM  \"YMMMMMP\" \"\"YUMMMP\"  \"YmmMMMM\"\"  \"YMmMY\"     MMM     \"\"\"\"YUMMMMMMM   \"W\"  ${NC}"
+echo -e "${GREEN}  _____       _               _            ${NC}"
+echo -e "${GREEN} |  __ \     | |             | |           ${NC}"
+echo -e "${GREEN} | |  \/ ___ | |__  _   _ ___| |_ ___ _ __ ${NC}"
+echo -e "${GREEN} | | __ / _ \| '_ \| | | / __| __/ _ \ '__|${NC}"
+echo -e "${GREEN} | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   ${NC}"
+echo -e "${GREEN}  \____/\___/|_.__/ \__,_|___/\__\___|_|   ${NC}"
+echo -e "${GREEN}                                          ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
 GOBUSTER_OUTPUT="$REPORT_DIR/gobuster.txt"
 if command -v gobuster >/dev/null 2>&1 && [ -s "$HTTPX_OUTPUT" ]; then
     > "$GOBUSTER_OUTPUT"
     while read -r url; do
-        gobuster dir -u "$url" -w /usr/share/wordlists/dirb/common.txt >> "$GOBUSTER_OUTPUT" 2>&1 || true
+        [ -n "$url" ] && gobuster dir -u "$url" -w /usr/share/wordlists/dirb/common.txt >> "$GOBUSTER_OUTPUT" 2>&1 || true
     done < "$HTTPX_OUTPUT"
     echo "[*] Gobuster results saved to $GOBUSTER_OUTPUT"
 else
@@ -162,8 +163,7 @@ NIKTO_OUTPUT="$REPORT_DIR/nikto.txt"
 if command -v nikto >/dev/null 2>&1 && [ -s "$HTTPX_OUTPUT" ]; then
     > "$NIKTO_OUTPUT"
     while read -r url; do
-        echo "[*] Scanning $url with Nikto..."
-        nikto -h "$url" >> "$NIKTO_OUTPUT" 2>&1 || true
+        [ -n "$url" ] && echo "[*] Scanning $url with Nikto..." && nikto -h "$url" >> "$NIKTO_OUTPUT" 2>&1 || true
     done < "$HTTPX_OUTPUT"
     echo "[*] Nikto results saved to $NIKTO_OUTPUT"
 else
