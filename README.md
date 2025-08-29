@@ -29,36 +29,38 @@
 
 ### 1️⃣ Clone the repo
 
-`git clone https://github.com/AlexKrechmer/unicorn_scan.git` 
+```bash
 
-`cd unicorn_scan`
+git clone https://github.com/AlexKrechmer/unicorn_scan.git
 
-### 2️⃣ Install dependencies
+cd unicorn_scan
 
-**Update & essentials:**
+2️⃣ Install system dependencies
+``
+sudo apt update
 
-`sudo apt update && sudo apt install -y git curl wget nmap gobuster nikto`
+sudo apt install -y git curl wget nmap gobuster nikto
 
-**Install Go (for Naabu & HTTPX):**
-```
-curl -LO https://go.dev/dl/go1.21.2.linux-amd64.tar.gz 
+3️⃣ Install Go (for Naabu & HTTPX)
 
-sudo rm -rf /usr/local/go 
+curl -LO https://go.dev/dl/go1.24.6.linux-amd64.tar.gz
 
-sudo tar -C /usr/local -xzf go1.21.2.linux-amd64.tar.gz 
+sudo rm -rf /usr/local/go
 
-echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc 
+sudo tar -C /usr/local -xzf go1.24.6.linux-amd64.tar.gz
+
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
 
 source ~/.bashrc
+
+go version # should show go1.24.6
+
+4️⃣ Install Naabu & HTTPX
+
+go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+
+go install github.com/projectdiscovery/httpx/cmd/httpx@latest
 ```
-**Install Naabu & HTTPX:**
-
-`go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest `
-
-`go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`
-
-> After this, `naabu`, `httpx`, `gobuster`, `nikto`, and `nmap` should be available in your PATH.
-
 ---
 
 ### 3️⃣ Usage Options
