@@ -64,7 +64,13 @@ echo "[*] Reports will be saved to $REPORT_DIR"
 # ====================
 # Naabu Phase
 # ====================
-[ -n "$NAABU_BIN" ] && echo "[*] Running Naabu..." && $NAABU_BIN -host "$TARGET" -o "$NAABU_OUTPUT" || touch "$NAABU_OUTPUT"
+echo -e "\n${BLUE}[*] Running Naabu...${NC}"
+if [ -n "$NAABU_BIN" ]; then
+    $NAABU_BIN -host "$TARGET" -silent | tee "$NAABU_OUTPUT"
+else
+    echo "[!] Naabu not found, skipping." | tee "$NAABU_OUTPUT"
+    touch "$NAABU_OUTPUT"
+fi
 PORTS=$(awk -F: '{print $2?$2:$1}' "$NAABU_OUTPUT" | tr '\n' ',' | sed 's/,$//')
 echo "[*] Naabu results saved to $NAABU_OUTPUT"
 echo "====================" >> "$REPORT_FILE"
@@ -82,10 +88,10 @@ echo -e "${ORANGE}                      |__|   ${NC}"
 echo -e "${ORANGE}====================================================${NC}"
 
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
-    echo "[*] Running Nmap on discovered ports: $PORTS"
-    $NMAP_BIN -p "$PORTS" -sV "$TARGET" -oN "$NMAP_OUTPUT" | tee "$NMAP_OUTPUT" || touch "$NMAP_OUTPUT"
+    echo -e "${ORANGE}[*] Running Nmap on discovered ports: $PORTS${NC}"
+    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee "$NMAP_OUTPUT"
 else
-    echo "[!] No ports found or Nmap missing, skipping Nmap."
+    echo "[!] No ports found or Nmap missing, skipping." | tee "$NMAP_OUTPUT"
     touch "$NMAP_OUTPUT"
 fi
 echo "[*] Nmap results saved to $NMAP_OUTPUT"
@@ -108,10 +114,10 @@ echo -e "${PURPLE}====================================================${NC}"
 if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_OUTPUT" ]; then
     grep 'open' "$NMAP_OUTPUT" | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
         echo "http://$TARGET:$port"
-    done | $HTTPX_BIN -silent | tee "$HTTPX_OUTPUT" || touch "$HTTPX_OUTPUT"
+    done | $HTTPX_BIN -silent | tee "$HTTPX_OUTPUT"
     echo "[*] HTTPX results saved to $HTTPX_OUTPUT"
 else
-    echo "[!] HTTPX not found or no HTTP ports, skipping."
+    echo "[!] HTTPX not found or no HTTP ports, skipping." | tee "$HTTPX_OUTPUT"
     touch "$HTTPX_OUTPUT"
 fi
 echo "====================" >> "$REPORT_FILE"
@@ -132,12 +138,13 @@ echo -e "${GREEN}                                          ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
-    while read -r url; do
-        [ -n "$url" ] && echo "[*] Scanning $url with Gobuster..." && $GOBUSTER_BIN dir -u "$url" -w /usr/share/wordlists/dirb/common.txt 2>&1 | tee -a "$GOBUSTER_OUTPUT"
+    while IFS= read -r url; do
+        [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster...${NC}" && \
+        $GOBUSTER_BIN dir -u "$url" -w /usr/share/wordlists/dirb/common.txt 2>&1 | tee -a "$GOBUSTER_OUTPUT"
     done < "$HTTPX_OUTPUT"
     echo "[*] Gobuster results saved to $GOBUSTER_OUTPUT"
 else
-    echo "[!] Gobuster not found or no HTTP services, skipping."
+    echo "[!] Gobuster not found or no HTTP services, skipping." | tee "$GOBUSTER_OUTPUT"
     touch "$GOBUSTER_OUTPUT"
 fi
 echo "====================" >> "$REPORT_FILE"
@@ -157,12 +164,13 @@ echo -e "${RED}        \\/        \\/              ${NC}"
 echo -e "${RED}====================================================${NC}"
 
 if [ -n "$NIKTO_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
-    while read -r url; do
-        [ -n "$url" ] && echo "[*] Scanning $url with Nikto..." && $NIKTO_BIN -h "$url" 2>&1 | tee -a "$NIKTO_OUTPUT"
+    while IFS= read -r url; do
+        [ -n "$url" ] && echo -e "${RED}[*] Scanning $url with Nikto...${NC}" && \
+        $NIKTO_BIN -h "$url" 2>&1 | tee -a "$NIKTO_OUTPUT"
     done < "$HTTPX_OUTPUT"
     echo "[*] Nikto results saved to $NIKTO_OUTPUT"
 else
-    echo "[!] Nikto not found or no HTTP services, skipping."
+    echo "[!] Nikto not found or no HTTP services, skipping." | tee "$NIKTO_OUTPUT"
     touch "$NIKTO_OUTPUT"
 fi
 echo "====================" >> "$REPORT_FILE"
@@ -170,3 +178,4 @@ echo "Nikto Scan Results" >> "$REPORT_FILE"
 cat "$NIKTO_OUTPUT" >> "$REPORT_FILE"
 
 echo "[*] Unicorn Scan finished! Reports saved in $REPORT_DIR"
+
