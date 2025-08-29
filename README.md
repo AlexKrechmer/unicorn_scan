@@ -40,17 +40,22 @@
 `sudo apt update && sudo apt install -y git curl wget nmap gobuster nikto`
 
 **Install Go (for Naabu & HTTPX):**
+```
+curl -LO https://go.dev/dl/go1.21.2.linux-amd64.tar.gz 
 
-`curl -LO https://go.dev/dl/go1.21.2.linux-amd64.tar.gz 
 sudo rm -rf /usr/local/go 
-sudo tar -C /usr/local -xzf go1.21.2.linux-amd64.tar.gz 
-echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc 
-source ~/.bashrc`
 
+sudo tar -C /usr/local -xzf go1.21.2.linux-amd64.tar.gz 
+
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc 
+
+source ~/.bashrc
+```
 **Install Naabu & HTTPX:**
 
-`go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest 
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`
+`go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest `
+
+`go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`
 
 > After this, `naabu`, `httpx`, `gobuster`, `nikto`, and `nmap` should be available in your PATH.
 
