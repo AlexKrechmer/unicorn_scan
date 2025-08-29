@@ -81,30 +81,6 @@ ${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
 ---
 
 ### 3️⃣ Usage Options
-
-#### ⚡ Fast Scan (Go Build)
-
-Quick port scan + Nmap on discovered ports. Minimal output, no HTTP or directories.
-
-# Build the fast scanner 
-
-`go build -o unicorn_scan unicorn_scan.go` 
-
-# Run fast scan 
-
-`sudo ./unicorn_scan example.com`
-
-**Output:**
-
-- Discovered ports
-  
-- Nmap scan on those ports
-  
-- Minimal report
-  
-
----
-
 #### 🐴 Full Recon (.sh)
 
 Runs **Naabu → Nmap → HTTPX → Gobuster → report**  
@@ -132,7 +108,25 @@ Includes colorful ASCII unicorn + full branding.
   
 - Full report saved in:  
   `unicorn_report_<target>_<timestamp>/report.txt`
+  #### ⚡ Fast Scan (Go Build)
+
+Quick port scan + Nmap on discovered ports. Minimal output, no HTTP or directories.
+
+# Build the fast scanner 
+
+`go build -o unicorn_scan unicorn_scan.go` 
+---
+# Run fast scan (optional)
+
+`sudo ./unicorn_scan example.com`
+
+**Output:**
+
+- Discovered ports
   
+- Nmap scan on those ports
+  
+- Minimal report
 
 ---
 
