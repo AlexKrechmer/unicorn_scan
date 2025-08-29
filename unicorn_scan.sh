@@ -34,21 +34,11 @@ GOBUSTER_BIN=$(find_tool gobuster)
 NIKTO_BIN=$(find_tool nikto)
 
 # ====================
-# Target & Reports
+# Target
 # ====================
 TARGET=$1
 [ -z "$TARGET" ] && { echo "Usage: $0 <target>"; exit 1; }
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-REPORT_DIR="unicorn_report_${TARGET}_${TIMESTAMP}"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-mkdir -p "$REPORT_DIR"
-
-NAABU_OUTPUT="$REPORT_DIR/naabu.txt"
-NMAP_OUTPUT="$REPORT_DIR/nmap.txt"
-HTTPX_OUTPUT="$REPORT_DIR/httpx.txt"
-GOBUSTER_OUTPUT="$REPORT_DIR/gobuster.txt"
-NIKTO_OUTPUT="$REPORT_DIR/nikto.txt"
-REPORT_FILE="$REPORT_DIR/report.txt"
 
 # ====================
 # Wordlists for Gobuster (auto-download if missing)
@@ -64,14 +54,14 @@ MEDIUM_WL="$WORDLIST_DIR/medium.txt"
 [[ ! -f $QUICKHIT_WL ]] && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
 [[ ! -f $MEDIUM_WL ]] && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
 
-echo "[*] Gobuster wordlists ready:"
-ls -1 "$WORDLIST_DIR"
-
 WORDLISTS=(
     "$SMALL_WL"
     "$QUICKHIT_WL"
     "$MEDIUM_WL"
 )
+
+echo "[*] Gobuster wordlists ready:"
+ls -1 "$WORDLIST_DIR"
 
 # ====================
 # Unicorn Banner
@@ -83,23 +73,17 @@ echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |${N
 echo -e "${YELLOW} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|${NC}"
 echo -e "${TEAL}                                  |_____|                  ${NC}"
 echo "[*] Starting Unicorn Scan on $TARGET"
-echo "[*] Reports will be saved to $REPORT_DIR"
 
 # ====================
 # Naabu Phase
 # ====================
 echo -e "\n${BLUE}[*] Running Naabu...${NC}"
 if [ -n "$NAABU_BIN" ]; then
-    $NAABU_BIN -host "$TARGET" -silent | tee "$NAABU_OUTPUT"
+    PORTS=$($NAABU_BIN -host "$TARGET" -silent | tee /dev/tty | awk -F: '{print $2?$2:$1}' | tr '\n' ',' | sed 's/,$//')
 else
-    echo "[!] Naabu not found, skipping." | tee "$NAABU_OUTPUT"
-    touch "$NAABU_OUTPUT"
+    echo "[!] Naabu not found, skipping."
+    PORTS=""
 fi
-PORTS=$(awk -F: '{print $2?$2:$1}' "$NAABU_OUTPUT" | tr '\n' ',' | sed 's/,$//')
-echo "[*] Naabu results saved to $NAABU_OUTPUT"
-echo "====================" >> "$REPORT_FILE"
-echo "Naabu Fast Scan" >> "$REPORT_FILE"
-cat "$NAABU_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
 # Nmap Phase
@@ -113,15 +97,11 @@ echo -e "${ORANGE}====================================================${NC}"
 
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
     echo -e "${ORANGE}[*] Running Nmap on discovered ports: $PORTS${NC}"
-    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee "$NMAP_OUTPUT"
+    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > nmap_tmp.txt
 else
-    echo "[!] No ports found or Nmap missing, skipping." | tee "$NMAP_OUTPUT"
-    touch "$NMAP_OUTPUT"
+    echo "[!] No ports found or Nmap missing, skipping."
+    nmap_tmp.txt=""
 fi
-echo "[*] Nmap results saved to $NMAP_OUTPUT"
-echo "====================" >> "$REPORT_FILE"
-echo "Nmap Scan on Discovered Ports: $PORTS" >> "$REPORT_FILE"
-cat "$NMAP_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
 # HTTPX Phase (live)
@@ -135,18 +115,13 @@ echo -e "${PURPLE}/_/ /_/\\__/\\__/ .___/_/|_|            ${NC}"
 echo -e "${PURPLE}             /_/                      ${NC}"
 echo -e "${PURPLE}====================================================${NC}"
 
-if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_OUTPUT" ]; then
-    grep 'open' "$NMAP_OUTPUT" | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
+HTTP_URLS=""
+if [ -n "$HTTPX_BIN" ] && [ -f nmap_tmp.txt ]; then
+    HTTP_URLS=$(grep 'open' nmap_tmp.txt | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
         echo "http://$TARGET:$port"
-    done | $HTTPX_BIN -silent | tee "$HTTPX_OUTPUT"
-    echo "[*] HTTPX results saved to $HTTPX_OUTPUT"
-else
-    echo "[!] HTTPX not found or no HTTP ports, skipping." | tee "$HTTPX_OUTPUT"
-    touch "$HTTPX_OUTPUT"
+    done | $HTTPX_BIN -silent)
+    echo "$HTTP_URLS"
 fi
-echo "====================" >> "$REPORT_FILE"
-echo "HTTPX Scan" >> "$REPORT_FILE"
-cat "$HTTPX_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
 # Gobuster Phase (live, auto wordlists)
@@ -161,21 +136,16 @@ echo -e "${GREEN}  \____/\___/|_.__/ \__,_|___/\__\___|_|   ${NC}"
 echo -e "${GREEN}                                          ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
-if [ -n "$GOBUSTER_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
+if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
         [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
         for WL in "${WORDLISTS[@]}"; do
-            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" 2>&1 | tee -a "$GOBUSTER_OUTPUT"
+            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL"
         done
-    done < "$HTTPX_OUTPUT"
-    echo "[*] Gobuster results saved to $GOBUSTER_OUTPUT"
+    done <<< "$HTTP_URLS"
 else
-    echo "[!] Gobuster not found or no HTTP services, skipping." | tee "$GOBUSTER_OUTPUT"
-    touch "$GOBUSTER_OUTPUT"
+    echo "[!] Gobuster not found or no HTTP services, skipping."
 fi
-echo "====================" >> "$REPORT_FILE"
-echo "Gobuster Scan" >> "$REPORT_FILE"
-cat "$GOBUSTER_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
 # Nikto Phase (live)
@@ -189,18 +159,12 @@ echo -e "${RED}\\____|__  /__|__|_ \\ |__|  \\____/ ${NC}"
 echo -e "${RED}        \\/        \\/              ${NC}"
 echo -e "${RED}====================================================${NC}"
 
-if [ -n "$NIKTO_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
+if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && echo -e "${RED}[*] Scanning $url with Nikto...${NC}" && \
-        $NIKTO_BIN -h "$url" 2>&1 | tee -a "$NIKTO_OUTPUT"
-    done < "$HTTPX_OUTPUT"
-    echo "[*] Nikto results saved to $NIKTO_OUTPUT"
+        [ -n "$url" ] && echo -e "${RED}[*] Scanning $url with Nikto...${NC}" && $NIKTO_BIN -h "$url"
+    done <<< "$HTTP_URLS"
 else
-    echo "[!] Nikto not found or no HTTP services, skipping." | tee "$NIKTO_OUTPUT"
-    touch "$NIKTO_OUTPUT"
+    echo "[!] Nikto not found or no HTTP services, skipping."
 fi
-echo "====================" >> "$REPORT_FILE"
-echo "Nikto Scan Results" >> "$REPORT_FILE"
-cat "$NIKTO_OUTPUT" >> "$REPORT_FILE"
 
-echo "[*] Unicorn Scan finished! Reports saved in $REPORT_DIR"
+echo "[*] Unicorn Scan finished!"
