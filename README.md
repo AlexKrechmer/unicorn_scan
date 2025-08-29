@@ -11,105 +11,77 @@
                                   |_____|# Features
 ```
 
-- **Fast Scan:** Naabu → Nmap (Go build version)
-- **Full Recon:** Naabu → Nmap → HTTPX → Gobuster → Nikto → report generation
-- **Color-coded phases:** Each tool has unique colors for readability
-- **Saved reports:** Organized folders per target
-- **ASCII unicorn branding:** Fun and easy to track phases visually
+Automated Recon Script with live output, default wordlists, and colored ASCII fun!
 
-# Quick Start
+---
 
-### 1️⃣ Clone Repo
-```
+## 1️⃣ Clone Repository
+
+```bash
+
 git clone https://github.com/AlexKrechmer/unicorn_scan.git
 
 cd unicorn_scan
-```
+
 2️⃣ Install System Dependencies
-```
+
 sudo apt update
 
-sudo apt install -y git curl wget nmap gobuster nikto golang-go
-```
-3️⃣ Install Go (if not using apt version)
-```
-curl -LO https://go.dev/dl/go1.24.6.linux-amd64.tar.gz
+sudo apt install -y git curl wget nmap gobuster nikto tar
 
-sudo rm -rf /usr/local/go
+⚠️ We skip golang-go from apt to avoid conflicts. We’ll install a self-contained Go 1.24.
 
-sudo tar -C /usr/local -xzf go1.24.6.linux-amd64.tar.gz
+3️⃣ Install Go Locally
 
-echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc
+# Download and extract Go 1.24.6 into a local folder
 
-source ~/.bashrc
-```
+curl -LO https://go.dev/dl/go1.24.6.linux-amd64.tar.gz && mkdir -p go && tar -C go -xzf go1.24.6.linux-amd64.tar.gz --strip-components=1
+
+# Add local Go to PATH for this session
+
+export PATH=$PWD/go/bin:$PWD/bin:$PATH
+
+# Verify installation
+
 go version # should show go1.24.6
 
-4️⃣ Install Naabu & HTTPX
-```
+This keeps Go inside the project folder—no system conflicts.
+
+4️⃣ Install Naabu & HTTPX Locally
+
+
+# Create a local bin folder for Go-installed binaries
+
+mkdir -p bin
+
+# Use module-aware mode
+
+export GOPATH=$PWD
+export GO111MODULE=on
+
+# Install tools into the local bin
+
 go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
-
 go install github.com/projectdiscovery/httpx/cmd/httpx@latest
-```
+
+# Confirm binaries
+
+ls bin/
+
+# Should show 'naabu' and 'httpx'
+
 5️⃣ Make Script Executable
-```
+
 chmod +x unicorn_scan.sh
-```
-⚡ Full Recon (-full)
+6️⃣ Run the Script
 
-Runs Naabu → Nmap → HTTPX → Gobuster → Nikto → report
+./unicorn_scan.sh
+All binaries (go, naabu, httpx) are local. No global PATH edits are needed.
 
-sudo ./unicorn_scan.sh example.com -full
+✅ Notes
+The local go/bin and bin folders contain all executables.
 
-Output:
+If you open a new shell, run export PATH=$PWD/go/bin:$PWD/bin:$PATH again inside the project folder.
 
-Colorful ASCII unicorn
-
-Naabu port scan
-
-Nmap scan on discovered ports
-
-HTTPX probe (green)
-
-Gobuster scan (orange)
-
-Nikto scan (red)
-
-Full report saved in unicorn_report_<target>_<timestamp>/report.txt
-
-⚠️ Gobuster & Nikto will be skipped if not installed or if no HTTP services are found.
-Usage Options
-
-🐴 Fast Scan
-Quick port scan + Nmap on discovered ports. Minimal output, no HTTP or directory scans.
-
-./unicorn_scan.sh example.com
-
-Output:
-
-Discovered ports
-
-Nmap scan (purple)
-
-Wordlists
-Default Gobuster wordlists are included in wordlists/:
-
-small.txt
-
-quickhits.txt
-
-medium.txt
-
-You can customize the Gobuster wordlist path in the script.
-
-Notes
-
-Fast scan: Great for quick reconnaissance
-
-Full scan: Detailed report + all steps automated
-
-Make sure Go binaries (naabu and httpx) are in your PATH for the script to work correctly.
-
-Acknowledgments
-
+Naabu, HTTPX, Nmap, Gobuster, and Nikto will all work together inside unicorn_scan.sh.
 For my daughter — this unicorn theme is dedicated to you. 🦄     
