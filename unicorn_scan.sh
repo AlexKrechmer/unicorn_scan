@@ -1,3 +1,4 @@
+
 #!/bin/bash
 # unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
 # By Alex 🦄
@@ -41,27 +42,36 @@ TARGET=$1
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # ====================
-# Wordlists for Gobuster (auto-download if missing)
+# Wordlists for Gobuster (try defaults, fallback to SecLists)
 # ====================
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
-SMALL_WL="$WORDLIST_DIR/small.txt"
-QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
-MEDIUM_WL="$WORDLIST_DIR/medium.txt"
-
-[[ ! -f $SMALL_WL ]] && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
-[[ ! -f $QUICKHIT_WL ]] && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
-[[ ! -f $MEDIUM_WL ]] && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
-
-WORDLISTS=(
-    "$SMALL_WL"
-    "$QUICKHIT_WL"
-    "$MEDIUM_WL"
+# Try multiple common Gobuster default paths
+GOBUSTER_DEFAULTS=(
+    "/usr/share/gobuster/wordlists"
+    "/usr/share/wordlists/gobuster"
 )
 
+SMALL_WL=""
+QUICKHIT_WL=""
+MEDIUM_WL=""
+for path in "${GOBUSTER_DEFAULTS[@]}"; do
+    [ -f "$path/common.txt" ] && SMALL_WL="$path/common.txt"
+    [ -f "$path/quickhits.txt" ] && QUICKHIT_WL="$path/quickhits.txt"
+    [ -f "$path/medium.txt" ] && MEDIUM_WL="$path/medium.txt"
+done
+
+# fallback to SecLists if Gobuster default missing
+[[ ! -f "$SMALL_WL" ]] && SMALL_WL="$WORDLIST_DIR/small.txt" && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
+[[ ! -f "$QUICKHIT_WL" ]] && QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt" && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
+[[ ! -f "$MEDIUM_WL" ]] && MEDIUM_WL="$WORDLIST_DIR/medium.txt" && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
+
+WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
 echo "[*] Gobuster wordlists ready:"
-ls -1 "$WORDLIST_DIR"
+for wl in "${WORDLISTS[@]}"; do
+    [ -f "$wl" ] && echo " - $wl"
+done
 
 # ====================
 # Unicorn Banner
@@ -69,7 +79,7 @@ ls -1 "$WORDLIST_DIR"
 echo -e "${PINK}           _                                               ${NC}"
 echo -e "${YELLOW} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ ${NC}"
 echo -e "${TEAL}/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \\ ${NC}"
-echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |${NC}"
+echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | |   \__ \ (_| (_| | | | |${NC}"
 echo -e "${YELLOW} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|${NC}"
 echo -e "${TEAL}                                  |_____|                  ${NC}"
 echo "[*] Starting Unicorn Scan on $TARGET"
@@ -78,11 +88,12 @@ echo "[*] Starting Unicorn Scan on $TARGET"
 # Naabu Phase
 # ====================
 echo -e "\n${BLUE}[*] Running Naabu...${NC}"
+PORTS=""
 if [ -n "$NAABU_BIN" ]; then
-    PORTS=$($NAABU_BIN -host "$TARGET" -silent | tee /dev/tty | awk -F: '{print $2?$2:$1}' | tr '\n' ',' | sed 's/,$//')
+    PORTS=$($NAABU_BIN -host "$TARGET" -silent | awk -F: '{print $2?$2:$1}' | tr '\n' ',' | sed 's/,$//')
+    [ -n "$PORTS" ] && echo "[*] Discovered ports: $PORTS"
 else
     echo "[!] Naabu not found, skipping."
-    PORTS=""
 fi
 
 # ====================
@@ -95,12 +106,12 @@ echo -e "${ORANGE} |__|__|__|__|__|___._|   __|${NC}"
 echo -e "${ORANGE}                      |__|   ${NC}"
 echo -e "${ORANGE}====================================================${NC}"
 
+NMAP_TMP=$(mktemp)
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
-    echo -e "${ORANGE}[*] Running Nmap on discovered ports: $PORTS${NC}"
-    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > nmap_tmp.txt
+    echo -e "${ORANGE}[*] Running Nmap on discovered ports...${NC}"
+    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > "$NMAP_TMP"
 else
     echo "[!] No ports found or Nmap missing, skipping."
-    nmap_tmp.txt=""
 fi
 
 # ====================
@@ -116,15 +127,13 @@ echo -e "${PURPLE}             /_/                      ${NC}"
 echo -e "${PURPLE}====================================================${NC}"
 
 HTTP_URLS=""
-if [ -n "$HTTPX_BIN" ] && [ -f nmap_tmp.txt ]; then
-    HTTP_URLS=$(grep 'open' nmap_tmp.txt | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
-        echo "http://$TARGET:$port"
-    done | $HTTPX_BIN -silent)
-    echo "$HTTP_URLS"
+if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_TMP" ]; then
+    HTTP_URLS=$(awk '/open/ && $3 ~ /http/ {gsub("/", "", $1); print "http://'$TARGET':"$1}' "$NMAP_TMP" | $HTTPX_BIN -silent)
+    [ -n "$HTTP_URLS" ] && echo "$HTTP_URLS"
 fi
 
 # ====================
-# Gobuster Phase (live, auto wordlists)
+# Gobuster Phase (live)
 # ====================
 echo -e "${GREEN}====================================================${NC}"
 echo -e "${GREEN}  _____       _               _            ${NC}"
@@ -133,14 +142,13 @@ echo -e "${GREEN} | |  \/ ___ | |__  _   _ ___| |_ ___ _ __ ${NC}"
 echo -e "${GREEN} | | __ / _ \| '_ \| | | / __| __/ _ \ '__|${NC}"
 echo -e "${GREEN} | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   ${NC}"
 echo -e "${GREEN}  \____/\___/|_.__/ \__,_|___/\__\___|_|   ${NC}"
-echo -e "${GREEN}                                          ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
         [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
         for WL in "${WORDLISTS[@]}"; do
-            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL"
+            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q
         done
     done <<< "$HTTP_URLS"
 else
@@ -167,4 +175,8 @@ else
     echo "[!] Nikto not found or no HTTP services, skipping."
 fi
 
+# ====================
+# Cleanup
+# ====================
+rm -f "$NMAP_TMP"
 echo "[*] Unicorn Scan finished!"
