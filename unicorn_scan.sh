@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
 # By Alex 🦄
