@@ -39,19 +39,18 @@ ${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
 # Detect Go httpx binary
 # ====================
 HTTPX_BIN=""
+
+# Explicit user home (in case sudo changes HOME)
+USER_HOME=$(eval echo ~${SUDO_USER:-$USER})
+
 if command -v httpx >/dev/null 2>&1; then
-    if httpx -version 2>&1 | grep -q "Current httpx version"; then
-        HTTPX_BIN=$(command -v httpx)
-    elif [ -f "$HOME/go/bin/httpx" ]; then
-        HTTPX_BIN="$HOME/go/bin/httpx"
-    else
-        echo "[!] Go httpx binary not found. HTTPX scan will be skipped."
-    fi
-elif [ -f "$HOME/go/bin/httpx" ]; then
-    HTTPX_BIN="$HOME/go/bin/httpx"
+    HTTPX_BIN=$(command -v httpx)
+elif [ -f "$USER_HOME/go/bin/httpx" ]; then
+    HTTPX_BIN="$USER_HOME/go/bin/httpx"
 else
     echo "[!] Go httpx binary not found. HTTPX scan will be skipped."
 fi
+
 
 # ====================
 # Naabu Port Scan
