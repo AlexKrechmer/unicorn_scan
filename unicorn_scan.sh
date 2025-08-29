@@ -1,8 +1,6 @@
 #!/bin/bash
-# unicorn_scan.sh - Automated Recon Script
+# unicorn_scan.sh - Automated Recon Script (Live output for all phases)
 # By Alex 🦄
-# ====================
-# Clean output + ASCII banners
 
 # ====================
 # Colors
@@ -85,7 +83,7 @@ echo -e "${ORANGE}====================================================${NC}"
 
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
     echo "[*] Running Nmap on discovered ports: $PORTS"
-    $NMAP_BIN -p "$PORTS" -sV "$TARGET" -oN "$NMAP_OUTPUT" || touch "$NMAP_OUTPUT"
+    $NMAP_BIN -p "$PORTS" -sV "$TARGET" -oN "$NMAP_OUTPUT" | tee "$NMAP_OUTPUT" || touch "$NMAP_OUTPUT"
 else
     echo "[!] No ports found or Nmap missing, skipping Nmap."
     touch "$NMAP_OUTPUT"
@@ -110,7 +108,7 @@ echo -e "${PURPLE}====================================================${NC}"
 if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_OUTPUT" ]; then
     grep 'open' "$NMAP_OUTPUT" | awk '$3 ~ /http/{print $1}' | cut -d/ -f1 | while read -r port; do
         echo "http://$TARGET:$port"
-    done | $HTTPX_BIN -silent -o "$HTTPX_OUTPUT" || touch "$HTTPX_OUTPUT"
+    done | $HTTPX_BIN -silent | tee "$HTTPX_OUTPUT" || touch "$HTTPX_OUTPUT"
     echo "[*] HTTPX results saved to $HTTPX_OUTPUT"
 else
     echo "[!] HTTPX not found or no HTTP ports, skipping."
@@ -134,9 +132,8 @@ echo -e "${GREEN}                                          ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
-    > "$GOBUSTER_OUTPUT"
     while read -r url; do
-        [ -n "$url" ] && $GOBUSTER_BIN dir -u "$url" -w /usr/share/wordlists/dirb/common.txt >> "$GOBUSTER_OUTPUT" 2>&1 || true
+        [ -n "$url" ] && echo "[*] Scanning $url with Gobuster..." && $GOBUSTER_BIN dir -u "$url" -w /usr/share/wordlists/dirb/common.txt 2>&1 | tee -a "$GOBUSTER_OUTPUT"
     done < "$HTTPX_OUTPUT"
     echo "[*] Gobuster results saved to $GOBUSTER_OUTPUT"
 else
@@ -160,9 +157,8 @@ echo -e "${RED}        \\/        \\/              ${NC}"
 echo -e "${RED}====================================================${NC}"
 
 if [ -n "$NIKTO_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
-    > "$NIKTO_OUTPUT"
     while read -r url; do
-        [ -n "$url" ] && echo "[*] Scanning $url with Nikto..." && $NIKTO_BIN -h "$url" >> "$NIKTO_OUTPUT" 2>&1 || true
+        [ -n "$url" ] && echo "[*] Scanning $url with Nikto..." && $NIKTO_BIN -h "$url" 2>&1 | tee -a "$NIKTO_OUTPUT"
     done < "$HTTPX_OUTPUT"
     echo "[*] Nikto results saved to $NIKTO_OUTPUT"
 else
@@ -174,4 +170,3 @@ echo "Nikto Scan Results" >> "$REPORT_FILE"
 cat "$NIKTO_OUTPUT" >> "$REPORT_FILE"
 
 echo "[*] Unicorn Scan finished! Reports saved in $REPORT_DIR"
-
