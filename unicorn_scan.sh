@@ -1,5 +1,5 @@
 #!/bin/bash
-# unicorn_scan.sh - Automated Recon Script (Live output for all phases)
+# unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
 # By Alex 🦄
 
 # ====================
@@ -40,6 +40,7 @@ TARGET=$1
 [ -z "$TARGET" ] && { echo "Usage: $0 <target>"; exit 1; }
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPORT_DIR="unicorn_report_${TARGET}_${TIMESTAMP}"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 mkdir -p "$REPORT_DIR"
 
 NAABU_OUTPUT="$REPORT_DIR/naabu.txt"
@@ -48,6 +49,29 @@ HTTPX_OUTPUT="$REPORT_DIR/httpx.txt"
 GOBUSTER_OUTPUT="$REPORT_DIR/gobuster.txt"
 NIKTO_OUTPUT="$REPORT_DIR/nikto.txt"
 REPORT_FILE="$REPORT_DIR/report.txt"
+
+# ====================
+# Wordlists for Gobuster (auto-download if missing)
+# ====================
+WORDLIST_DIR="$SCRIPT_DIR/wordlists"
+mkdir -p "$WORDLIST_DIR"
+
+SMALL_WL="$WORDLIST_DIR/small.txt"
+QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
+MEDIUM_WL="$WORDLIST_DIR/medium.txt"
+
+[[ ! -f $SMALL_WL ]] && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
+[[ ! -f $QUICKHIT_WL ]] && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
+[[ ! -f $MEDIUM_WL ]] && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
+
+echo "[*] Gobuster wordlists ready:"
+ls -1 "$WORDLIST_DIR"
+
+WORDLISTS=(
+    "$SMALL_WL"
+    "$QUICKHIT_WL"
+    "$MEDIUM_WL"
+)
 
 # ====================
 # Unicorn Banner
@@ -100,7 +124,7 @@ echo "Nmap Scan on Discovered Ports: $PORTS" >> "$REPORT_FILE"
 cat "$NMAP_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
-# HTTPX Phase
+# HTTPX Phase (live)
 # ====================
 echo -e "${PURPLE}====================================================${NC}"
 echo -e "${PURPLE}               __    __  __            ${NC}"
@@ -125,7 +149,7 @@ echo "HTTPX Scan" >> "$REPORT_FILE"
 cat "$HTTPX_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
-# Gobuster Phase
+# Gobuster Phase (live, auto wordlists)
 # ====================
 echo -e "${GREEN}====================================================${NC}"
 echo -e "${GREEN}  _____       _               _            ${NC}"
@@ -139,8 +163,10 @@ echo -e "${GREEN}====================================================${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -s "$HTTPX_OUTPUT" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster...${NC}" && \
-        $GOBUSTER_BIN dir -u "$url" -w /usr/share/wordlists/dirb/common.txt 2>&1 | tee -a "$GOBUSTER_OUTPUT"
+        [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
+        for WL in "${WORDLISTS[@]}"; do
+            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" 2>&1 | tee -a "$GOBUSTER_OUTPUT"
+        done
     done < "$HTTPX_OUTPUT"
     echo "[*] Gobuster results saved to $GOBUSTER_OUTPUT"
 else
@@ -152,7 +178,7 @@ echo "Gobuster Scan" >> "$REPORT_FILE"
 cat "$GOBUSTER_OUTPUT" >> "$REPORT_FILE"
 
 # ====================
-# Nikto Phase
+# Nikto Phase (live)
 # ====================
 echo -e "${RED}====================================================${NC}"
 echo -e "${RED} _______  .__ __      __          ${NC}"
@@ -178,4 +204,3 @@ echo "Nikto Scan Results" >> "$REPORT_FILE"
 cat "$NIKTO_OUTPUT" >> "$REPORT_FILE"
 
 echo "[*] Unicorn Scan finished! Reports saved in $REPORT_DIR"
-
