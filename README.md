@@ -1,6 +1,5 @@
 # Unicorn Scan 🦄
 
-```bash
 # Color codes
 PINK='\033[1;35m'
 CYAN='\033[0;36m'
@@ -8,43 +7,36 @@ YELLOW='\033[1;33m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-# Unicorn ASCII
-echo -e
-"${YELLOW}⠀⠀⠑⢦⡀${PINK}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀${PINK}⠙⢷⣦⣀⠀⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀${PINK}⠈⢿⣷⣿⣾⣿⣧⣄⠀⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀${PINK}⣰⣿⣿⣿⣿⣿⣿⣿⣇⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⢀${PINK}⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣥${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠸${PINK}⣿⠟⠉⠉⢹⣿⣿⣿⣿⣿⣿⣀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠${PINK}⣿⣿⣿⣿⣿⣿⣿${NC}"
+# Unicorn ASCII with colors
+echo -e "${YELLOW}             _                                               "
+echo -e "${PINK} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __  "
+echo -e "/ / \\ \\ '_ \\| |/ __/ _ \\| '__| '_ \\    / __|/ __/ _\` | '_ \\ "
+echo -e "${CYAN} \\ \\_/ / | | | | (_| (_) | |  | | | |   \\__ \\ (_| (_| | | | |"
+echo -e "${WHITE}  \\___/|_| |_|_|\\___\\___/|_|  |_| |_|___|___/\\___\\__,_|_| |_|"
+echo -e "                                  |_____|${NC}"
 
-# Logo text
-echo -e "${YELLOW}             _                                              
-${PINK} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __  
-/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \ 
-${CYAN}\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |
-${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
-                                  |_____|${NC}"
-```
+---
 
-#### Features
+## Features
 
 - **Fast Scan:** Naabu → Nmap (Go build version)
   
-- **Full Recon:** Naabu → Nmap → HTTPX → Gobuster → report generation
+- **Full Recon:** Naabu → Nmap → HTTPX → Gobuster → Nikto → report generation
   
-- **Colorful unicorn ASCII branding** for fun + readability
+- **Color-coded phases:** Each tool has unique colors for readability
   
-- **Saved reports** for each target in organized folders
+- **Saved reports:** Organized folders per target
+  
+- **ASCII unicorn branding:** Fun and easy to track phases visually
   
 
 ---
 
-## Quick Start 
+## Quick Start
 
-### 1️⃣ clone the repo
+### 1️⃣ Clone the repo
 
-`git clone https://github.com/AlexKrechmer/unicorn_scan.git `
+`git clone https://github.com/AlexKrechmer/unicorn_scan.git` 
 
 `cd unicorn_scan`
 
@@ -52,110 +44,88 @@ ${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
 
 **Update & essentials:**
 
-`sudo apt update && sudo apt install -y git curl wget nmap`
+`sudo apt update && sudo apt install -y git curl wget nmap gobuster nikto`
 
 **Install Go (for Naabu & HTTPX):**
 
-
-`curl -LO https://go.dev/dl/go1.21.2.linux-amd64.tar.gz` 
-
-`sudo rm -rf /usr/local/go` 
-
-`sudo tar -C /usr/local -xzf go1.21.2.linux-amd64.tar.gz` 
-
-`echo export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin >> ~/.bashrc` 
-
-`source ~/.bashrc`
+`curl -LO https://go.dev/dl/go1.21.2.linux-amd64.tar.gz 
+sudo rm -rf /usr/local/go 
+sudo tar -C /usr/local -xzf go1.21.2.linux-amd64.tar.gz 
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> ~/.bashrc 
+source ~/.bashrc`
 
 **Install Naabu & HTTPX:**
 
-`go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest`
+`go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest 
+go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`
 
-`go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest`
-
-**Install Gobuster:**
-
-`sudo apt install -y gobuster`
-
-> After this, `naabu`, `httpx`, `gobuster`, and `nmap` should be available in your PATH.
+> After this, `naabu`, `httpx`, `gobuster`, `nikto`, and `nmap` should be available in your PATH.
 
 ---
 
 ### 3️⃣ Usage Options
-#### 🐴 Full Recon (.sh)
 
-Runs **Naabu → Nmap → HTTPX → Gobuster → report**  
+**🐴 Full Recon (.sh)**  
+Runs Naabu → Nmap → HTTPX → Gobuster → Nikto → report  
 Includes colorful ASCII unicorn + full branding.
-
-# Make script executable 
 
 `chmod +x unicorn_scan.sh` 
 
-# Run full scan
-
-` sudo ./unicorn_scan.sh example.com -full`
+`sudo ./unicorn_scan.sh example.com -full`
 
 **Output:**
 
-- Colorful unicorn ASCII in terminal
+- Colorful ASCII unicorn in terminal
   
 - Naabu port scan
   
-- Nmap scan on discovered ports
+- Nmap scan on discovered ports (purple)
   
-- HTTPX probe for live HTTP servers
+- HTTPX probe (green)
   
-- Gobuster directory scan on live HTTP URLs
+- Gobuster scan (orange)
   
-- Full report saved in:  
-  `unicorn_report_<target>_<timestamp>/report.txt`
-  #### ⚡ Fast Scan (Go Build)
+- Nikto scan (red)
+  
+- Full report saved in: `unicorn_report_<target>_<timestamp>/report.txt`
+  
 
+---
+
+**⚡ Fast Scan (Go Build)**  
 Quick port scan + Nmap on discovered ports. Minimal output, no HTTP or directories.
 
-# Build the fast scanner 
-
-`go build -o unicorn_scan unicorn_scan.go` 
----
-# Run fast scan (optional)
-
-`sudo ./unicorn_scan example.com`
+`go build -o unicorn_scan unicorn_scan.go sudo ./unicorn_scan example.com`
 
 **Output:**
 
 - Discovered ports
   
-- Nmap scan on those ports
+- Nmap scan (purple)
   
 - Minimal report
+  
 
 ---
 
 ### 4️⃣ Notes
 
-- Customize Gobuster wordlist in the script:  
+- Customize Gobuster wordlist in the script: `/usr/share/wordlists/dirb/common.txt`
   
-`/usr/share/wordlists/dirb/common.txt`
+- Fast scan: Perfect for quick recon
   
-- **Fast scan:** perfect for quick recon
-  
-- **Full scan:** detailed report + all steps automated
+- Full scan: Detailed report + all steps automated
   
 
 ---
 
 ### 5️⃣ Example Workflow
 
-# Fast scan first 
-`sudo ./unicorn_scan example.com` 
+`# Fast scan first sudo ./unicorn_scan example.com # If interesting ports found, run full recon sudo ./unicorn_scan.sh example.com -full # Check detailed report cat unicorn_report_example.com_20250828_231403/report.txt`
 
-# If interesting ports found, run full recon 
+---
 
-`sudo ./unicorn_scan.sh example.com -full` 
+### Acknowledgments
 
-# Check detailed report
-
-`cat unicorn_report_example.com_20250828_231403/report.txt`
-
-# Acknowledgments For my daughter, this unicorn theme is for you.
+For my daughter — this unicorn theme is dedicated to you. 🦄
 
