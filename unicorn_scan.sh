@@ -2,7 +2,7 @@
 # unicorn_scan.sh - Automated Recon Script
 # By Alex 🦄
 # ====================
-# Stable, feature-complete version with reliable paths
+# Clean output + ASCII banners
 
 # ====================
 # Colors
@@ -68,7 +68,6 @@ echo "[*] Reports will be saved to $REPORT_DIR"
 # ====================
 [ -n "$NAABU_BIN" ] && echo "[*] Running Naabu..." && $NAABU_BIN -host "$TARGET" -o "$NAABU_OUTPUT" || touch "$NAABU_OUTPUT"
 PORTS=$(awk -F: '{print $2?$2:$1}' "$NAABU_OUTPUT" | tr '\n' ',' | sed 's/,$//')
-
 echo "[*] Naabu results saved to $NAABU_OUTPUT"
 echo "====================" >> "$REPORT_FILE"
 echo "Naabu Fast Scan" >> "$REPORT_FILE"
