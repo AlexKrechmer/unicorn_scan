@@ -41,9 +41,7 @@ ${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
 
 ## Quick Start 
 
-### 1️⃣ Prepare a folder then clone the repo
-
-`mkdir ~/unicorn-scan && cd ~/unicorn_scan`
+### 1️⃣ clone the repo
 
 `git clone https://github.com/AlexKrechmer/unicorn_scan.git `
 
@@ -164,4 +162,5 @@ Includes colorful ASCII unicorn + full branding.
 
 `cat unicorn_report_example.com_20250828_231403/report.txt`
 
+# Acknowledgments For my daughter, this unicorn theme is for you.
 
