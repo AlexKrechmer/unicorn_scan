@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 TARGET=$1
@@ -12,22 +13,20 @@ DEFAULT_WORDLISTS=(
     "$HOME/Documents/gobuster/SecLists/Discovery/Web-Content/quickhits.txt"
     "$HOME/Documents/gobuster/SecLists/Discovery/Web-Content/raft-medium-words.txt"
 )
+
 # ===== Colors =====
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 MAGENTA='\033[0;35m'
+PINK='\033[1;35m'
 WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-# ===== Unicorn Brand =====
-PINK='\033[1;35m'
-CYAN='\033[0;36m'
-YELLOW='\033[1;33m'
-WHITE='\033[1;37m'
-NC='\033[0m'
+# ===== Unicorn ASCII =====
+echo -e
 
-echo -e "${YELLOW}⠀⠀⠀⠀⠑⢦⡀${PINK}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+"${YELLOW}⠀⠀⠑⢦⡀${PINK}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀${PINK}⠙⢷⣦⣀⠀⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀${PINK}⠈⢿⣷⣿⣾⣿⣧⣄⠀⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀${PINK}⣰⣿⣿⣿⣿⣿⣿⣿⣇⡀${CYAN}⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -41,12 +40,11 @@ ${PINK} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __
 ${CYAN}\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |
 ${WHITE} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
                                   |_____|${NC}"
+
 # ====================
 # Detect Go httpx binary
 # ====================
 HTTPX_BIN=""
-
-# Explicit user home (in case sudo changes HOME)
 USER_HOME=$(eval echo ~${SUDO_USER:-$USER})
 
 if command -v httpx >/dev/null 2>&1; then
@@ -56,7 +54,6 @@ elif [ -f "$USER_HOME/go/bin/httpx" ]; then
 else
     echo "[!] Go httpx binary not found. HTTPX scan will be skipped."
 fi
-
 
 # ====================
 # Naabu Port Scan
@@ -69,28 +66,15 @@ echo "====================" >> "$REPORT_DIR/report.txt"
 echo "Naabu Port Scan" >> "$REPORT_DIR/report.txt"
 cat "$NAABU_OUTPUT" >> "$REPORT_DIR/report.txt"
 
-# Extract ports only (comma-separated)
 PORTS=$(grep -oE '[0-9]+' "$NAABU_OUTPUT" | tr '\n' ',' | sed 's/,$//')
 
 # ====================
 # Nmap Scan
 # ====================
-echo -e "${GREEN}
-====================================================
-     ______                       
-       _  \.--------.---.-.-----.
-    |.  |   |        |  _  |  _  |
-    |.  |   |__|__|__|___._|   __|
-    |:  |   |              |__|   
-    |::.|   |                     
-                         
-         Nmap Scan
-====================================================
-${NC}"
-
-echo "[*] Running Nmap..."
+echo -e "${GREEN}[*] Running Nmap...${NC}"
 NMAP_OUTPUT="$REPORT_DIR/nmap.txt"
 nmap -p "$PORTS" "$TARGET" -oN "$NMAP_OUTPUT"
+
 echo "====================" >> "$REPORT_DIR/report.txt"
 echo "Nmap Scan on Discovered Ports: $PORTS" >> "$REPORT_DIR/report.txt"
 cat "$NMAP_OUTPUT" >> "$REPORT_DIR/report.txt"
@@ -98,20 +82,7 @@ cat "$NMAP_OUTPUT" >> "$REPORT_DIR/report.txt"
 # ====================
 # HTTPX + Gobuster Phase
 # ====================
-echo -e "${YELLOW}
-====================================================
- _    _ _   _             
-| |  | | | | |            
-| |__| | |_| |_ _ ____  __
-|  __  | __| __| '_ \ \/ /
-| |  | | |_| |_| |_) >  < 
-|_|  |_|\__|\__| .__/_/\_\\
-                | |        
-                |_|        
-====================================================
-${NC}"
-
-echo "[*] Running HTTPX..."
+echo -e "${YELLOW}[*] Running HTTPX...${NC}"
 HTTPX_OUTPUT="$REPORT_DIR/httpx.txt"
 
 if [ -n "$HTTPX_BIN" ]; then
@@ -124,22 +95,33 @@ else
     echo "[!] HTTPX scan skipped."
     touch "$HTTPX_OUTPUT"
 fi
+# ====================
+# Nikto Scan
+# ====================
+echo -e "${CYAN}[*] Running Nikto on discovered HTTP services...${NC}"
+NIKTO_OUTPUT="$REPORT_DIR/nikto.txt"
+
+if [ -s "$HTTPX_OUTPUT" ]; then
+    while read -r URL; do
+        echo "[*] Scanning $URL with Nikto..."
+        nikto -h "$URL" -output "$REPORT_DIR/nikto_$(echo $URL | sed 's/[:\/]/_/g').txt"
+        cat "$REPORT_DIR/nikto_$(echo $URL | sed 's/[:\/]/_/g').txt" >> "$NIKTO_OUTPUT"
+        echo "--------------------" >> "$NIKTO_OUTPUT"
+    done < <(awk '{print $1}' "$HTTPX_OUTPUT" | sort -u)
+
+    echo "[*] Nikto results saved to $NIKTO_OUTPUT"
+    echo "====================" >> "$REPORT_DIR/report.txt"
+    echo "Nikto Scan" >> "$REPORT_DIR/report.txt"
+    cat "$NIKTO_OUTPUT" >> "$REPORT_DIR/report.txt"
+else
+    echo "[!] No HTTP URLs found. Skipping Nikto."
+    touch "$NIKTO_OUTPUT"
+fi
 
 # ====================
-# Gobuster Scan
+# Gobuster Scan (Separate)
 # ====================
-echo -e "${MAGENTA}
-====================================================
-                __               __           
-   ____ _____  / /_  __  _______/ /____  _____
-  / __ `/ __ \/ __ \/ / / / ___/ __/ _ \/ ___/
- / /_/ / /_/ / /_/ / /_/ (__  ) /_/  __/ /    
- \__, /\____/_.___/\__,_/____/\__/\___/_/     
-/____/                                         
-====================================================
-${NC}"
-
-echo "[*] Running Gobuster..."
+echo -e "${MAGENTA}[*] Running Gobuster...${NC}"
 echo "====================" >> "$REPORT_DIR/report.txt"
 echo "Gobuster Directory Scan" >> "$REPORT_DIR/report.txt"
 
