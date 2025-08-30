@@ -18,7 +18,12 @@ TEAL="\033[1;36m"
 YELLOW="\033[1;93m"
 
 # ====================
-# Tool finder (updated)
+# Script directory
+# ====================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ====================
+# Tool finder
 # ====================
 find_tool() {
     local tool=$1
