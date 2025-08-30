@@ -170,23 +170,28 @@ echo -e "${GREEN}
 ====================================================
 ${NC}"
 
-if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
-    while IFS= read -r url; do
-        [ -n "$url" ] || continue
-        url="${url%/}"  # remove trailing slash
-        echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
-        
-        # Use absolute paths to wordlists
-        for WL in "${WORDLISTS[@]}"; do
-            if [ -f "$WL" ]; then
-                echo -e "${YELLOW}[>] Gobuster blasting with: $(basename "$WL")${NC}"
-                "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
-            else
-                echo -e "${RED}[!] Missing wordlist: $WL${NC}"
-            fi
-        done
-    done <<< "$HTTP_URLS"
-fi
+# define Gobuster binary
+GOBUSTER_BIN=$(which gobuster)  # make sure this finds your binary
+
+# define wordlists array
+WORDLISTS=(
+    "$SCRIPT_DIR/wordlists/raft-small-directories.txt"
+    "$SCRIPT_DIR/wordlists/quickhits.txt"
+    "$SCRIPT_DIR/wordlists/raft-medium-directories.txt"
+)
+
+# scan each URL
+for url in $HTTP_URLS; do
+    url="${url%/}"  # remove trailing slash
+    for WL in "${WORDLISTS[@]}"; do
+        if [ -f "$WL" ]; then
+            echo -e "${YELLOW}[>] Gobuster blasting $url with: $(basename "$WL")${NC}"
+            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
+        else
+            echo -e "${RED}[!] Missing wordlist: $WL${NC}"
+        fi
+    done
+done
 
 # ====================
 # Nikto Phase
