@@ -157,7 +157,7 @@ fi
 [ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
 
 # ====================
-# Gobuster Phase
+# Gobuster Phase (fixed)
 # ====================
 echo -e "${GREEN}
 ====================================================
@@ -180,8 +180,9 @@ WORDLISTS=(
     "$SCRIPT_DIR/wordlists/raft-medium-directories.txt"
 )
 
-# scan each URL
-for url in $HTTP_URLS; do
+# scan each URL line by line
+while IFS= read -r url; do
+    [ -z "$url" ] && continue
     url="${url%/}"  # remove trailing slash
     for WL in "${WORDLISTS[@]}"; do
         if [ -f "$WL" ]; then
@@ -191,7 +192,8 @@ for url in $HTTP_URLS; do
             echo -e "${RED}[!] Missing wordlist: $WL${NC}"
         fi
     done
-done
+done <<< "$HTTP_URLS"
+
 
 # ====================
 # Nikto Phase
