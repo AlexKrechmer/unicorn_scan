@@ -54,19 +54,20 @@ TARGET=$1
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
-# Predefined Gobuster locations
+# Use Gobuster's default wordlist paths if available
 GOBUSTER_DEFAULTS=(
     "/usr/share/gobuster/wordlists"
     "/usr/share/wordlists/gobuster"
 )
 
+# Initialize empty
 SMALL_WL=""
 QUICKHIT_WL=""
 MEDIUM_WL=""
 for path in "${GOBUSTER_DEFAULTS[@]}"; do
-    [ -f "$path/common.txt" ] && SMALL_WL="$path/common.txt"
-    [ -f "$path/quickhits.txt" ] && QUICKHIT_WL="$path/quickhits.txt"
-    [ -f "$path/medium.txt" ] && MEDIUM_WL="$path/medium.txt"
+    [ -f "$path/common.txt" ] && [ -z "$SMALL_WL" ] && SMALL_WL="$path/common.txt"
+    [ -f "$path/quickhits.txt" ] && [ -z "$QUICKHIT_WL" ] && QUICKHIT_WL="$path/quickhits.txt"
+    [ -f "$path/medium.txt" ] && [ -z "$MEDIUM_WL" ] && MEDIUM_WL="$path/medium.txt"
 done
 
 # Fallback: download if missing
