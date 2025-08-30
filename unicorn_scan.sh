@@ -157,7 +157,7 @@ fi
 HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')  # remove blank lines
 [ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
 
-# ====================
+## ====================
 # Gobuster Phase (fully robust)
 # ====================
 echo -e "${GREEN}
@@ -173,15 +173,14 @@ ${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        url="${url%/}"
-        [ -z "$url" ] && continue
+        url="${url%/}"              # remove trailing slash
+        [ -z "$url" ] && continue   # skip empty lines
         for WL in "${WORDLISTS[@]}"; do
-            if [ ! -f "$WL" ]; then
-                echo -e "${RED}[!] Missing wordlist: $WL${NC}"
-                continue
-            fi
+            [ ! -f "$WL" ] && continue  # skip missing wordlists
             echo -e "${YELLOW}[>] Gobuster blasting $url with: $(basename "$WL")${NC}"
-            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
+            # Force -u and -w with quotes, swallow errors
+            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q \
+                -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
         done
     done <<< "$HTTP_URLS"
 else
