@@ -58,9 +58,15 @@ SMALL_WL="$WORDLIST_DIR/small.txt"
 QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
 MEDIUM_WL="$WORDLIST_DIR/medium.txt"
 
-[[ ! -f "$SMALL_WL" ]] && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
-[[ ! -f "$QUICKHIT_WL" ]] && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
-[[ ! -f "$MEDIUM_WL" ]] && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
+# Auto-clone SecLists if missing
+if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" ]]; then
+    echo "[*] Gobuster wordlists missing, cloning SecLists..."
+    git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$SCRIPT_DIR/tmp_sec"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/common.txt" "$SMALL_WL"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/medium.txt" "$MEDIUM_WL"
+    rm -rf "$SCRIPT_DIR/tmp_sec"
+fi
 
 WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
 echo "[*] Gobuster wordlists ready:"
@@ -182,7 +188,7 @@ echo -e "${RED}
  /   |   \\|  |  |/ /\\   __\\/  _ \\ 
 /    |    \\  |    <  |  | (  <_> )
 \\____|__  /__|__|_ \\ |__|  \\____/ 
-        \\/        \\/              
+        \/        \/              
 ====================================================
 ${NC}"
 
@@ -200,4 +206,5 @@ fi
 # ====================
 rm -f "$NMAP_TMP"
 echo "[*] Unicorn Scan finished!"
+
 
