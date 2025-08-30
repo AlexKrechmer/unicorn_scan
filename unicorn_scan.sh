@@ -173,12 +173,14 @@ ${NC}"
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
         [ -n "$url" ] || continue
-        url="${url%/}"
+        url="${url%/}"  # remove trailing slash
         echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
+        
+        # Use absolute paths to wordlists
         for WL in "${WORDLISTS[@]}"; do
             if [ -f "$WL" ]; then
                 echo -e "${YELLOW}[>] Gobuster blasting with: $(basename "$WL")${NC}"
-                $GOBUSTER_BIN dir -u "$url" -w "$WL" -q || true
+                "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
             else
                 echo -e "${RED}[!] Missing wordlist: $WL${NC}"
             fi
