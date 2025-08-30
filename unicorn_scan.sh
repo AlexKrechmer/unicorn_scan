@@ -1,6 +1,8 @@
 #!/bin/bash
 # unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
 # By Alex 🦄
+set -euo pipefail
+IFS=$'\n\t'
 
 # ====================
 # Colors
@@ -16,11 +18,12 @@ TEAL="\033[1;36m"
 YELLOW="\033[1;93m"
 
 # ====================
-# Tool finder
+# Tool finder (updated)
 # ====================
 find_tool() {
     local tool=$1
-    for path in "$HOME/go/bin/$tool" "/usr/local/bin/$tool" "/usr/bin/$tool"; do
+    # Check custom script bin first
+    for path in "$SCRIPT_DIR/bin/$tool" "$HOME/go/bin/$tool" "/usr/local/bin/$tool" "/usr/bin/$tool"; do
         [ -x "$path" ] && echo "$path" && return
     done
     command -v "$tool" >/dev/null 2>&1 && command -v "$tool" && return
@@ -82,7 +85,7 @@ echo -e "${TEAL}                                  |_____|                  ${NC}
 echo "[*] Starting Unicorn Scan on $TARGET"
 
 # ====================
-# Naabu Phase with blue ASCII
+# Naabu Phase
 # ====================
 echo -e "${BLUE}
                   __       
@@ -93,7 +96,7 @@ ${NC}"
 
 PORTS=""
 if [ -n "$NAABU_BIN" ]; then
-    PORTS=$($NAABU_BIN -host "$TARGET" -silent | awk -F: '{print $2?$2:$1}' | tr '\n' ',' | sed 's/,$//')
+    PORTS=$($NAABU_BIN -host "$TARGET" -silent | awk -F: '{print $2?$2:$1}' | sort -nu | tr '\n' ',' | sed 's/,$//')
     [ -n "$PORTS" ] && echo "[*] Discovered ports: $PORTS"
 else
     echo "[!] Naabu not found, skipping."
@@ -120,7 +123,7 @@ else
 fi
 
 # ====================
-# HTTPX Phase
+# HTTP URL Generation (with HTTPX fallback)
 # ====================
 echo -e "${PURPLE}
 ====================================================
@@ -133,11 +136,20 @@ echo -e "${PURPLE}
 ====================================================
 ${NC}"
 
+# Extract HTTP ports from Nmap
+HTTP_PORTS=$(awk '/open/ && $3 ~ /http/ {gsub("/tcp","",$1); print $1}' "$NMAP_TMP")
 HTTP_URLS=""
-if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_TMP" ]; then
-    HTTP_URLS=$(awk '/open/ && $3 ~ /http/ {gsub("/", "", $1); print "http://'$TARGET':"$1}' "$NMAP_TMP" | $HTTPX_BIN -silent)
-    [ -n "$HTTP_URLS" ] && echo "$HTTP_URLS"
+for port in $HTTP_PORTS; do
+    HTTP_URLS+="http://$TARGET:$port"$'\n'
+done
+
+# Run through HTTPX if installed, fallback silently
+if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
+    HTTP_URLS=$($HTTPX_BIN -silent <<< "$HTTP_URLS" || echo "$HTTP_URLS")
 fi
+
+# Show URLs
+[ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
 
 # ====================
 # Gobuster Phase
@@ -153,10 +165,10 @@ echo -e "${GREEN}
 ====================================================
 ${NC}"
 
-# Always run if Gobuster exists and HTTP ports found
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
+        [ -n "$url" ] && url="${url%/}"
+        echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
         for WL in "${WORDLISTS[@]}"; do
             [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q
         done
@@ -179,7 +191,9 @@ ${NC}"
 
 if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && echo -e "${RED}[*] Scanning $url with Nikto...${NC}" && $NIKTO_BIN -h "$url"
+        [ -n "$url" ] && url="${url%/}"
+        echo -e "${RED}[*] Scanning $url with Nikto...${NC}" 
+        $NIKTO_BIN -h "$url"
     done <<< "$HTTP_URLS"
 fi
 
