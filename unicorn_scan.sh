@@ -58,7 +58,6 @@ SMALL_WL="$WORDLIST_DIR/raft-small-directories.txt"
 QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
 MEDIUM_WL="$WORDLIST_DIR/raft-medium-directories.txt"
 
-# Auto-clone SecLists if missing
 if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" ]]; then
     echo "[*] Gobuster wordlists missing, cloning SecLists..."
     git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$SCRIPT_DIR/tmp_sec"
@@ -66,6 +65,8 @@ if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" ]]; then
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL"
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-medium-directories.txt" "$MEDIUM_WL"
     rm -rf "$SCRIPT_DIR/tmp_sec"
+else
+    echo "[*] Wordlists already present, skipping clone."
 fi
 
 WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
@@ -73,13 +74,14 @@ echo "[*] Gobuster wordlists ready (order: small → quick → medium):"
 for wl in "${WORDLISTS[@]}"; do
     [ -f "$wl" ] && echo " - $wl"
 done
+
 # ====================
 # Unicorn Banner
 # ====================
 echo -e "${PINK}           _                                               ${NC}"
 echo -e "${YELLOW} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ ${NC}"
 echo -e "${TEAL}/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \\ ${NC}"
-echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | |   \__ \ (_| (_| | | | |${NC}"
+echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |${NC}"
 echo -e "${YELLOW} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|${NC}"
 echo -e "${TEAL}                                  |_____|                  ${NC}"
 echo "[*] Starting Unicorn Scan on $TARGET"
@@ -172,7 +174,12 @@ if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
         url="${url%/}"
         echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
         for WL in "${WORDLISTS[@]}"; do
-            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q || true
+            if [ -f "$WL" ]; then
+                echo -e "${YELLOW}[>] Gobuster blasting with: $(basename "$WL")${NC}"
+                $GOBUSTER_BIN dir -u "$url" -w "$WL" -q || true
+            else
+                echo -e "${RED}[!] Missing wordlist: $WL${NC}"
+            fi
         done
     done <<< "$HTTP_URLS"
 fi
@@ -205,5 +212,3 @@ fi
 # ====================
 rm -f "$NMAP_TMP"
 echo "[*] Unicorn Scan finished!"
-
-
