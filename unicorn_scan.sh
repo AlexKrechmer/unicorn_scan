@@ -1,8 +1,13 @@
 #!/bin/bash
 # unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
 # By Alex 🦄
+# Safe to run with: sudo ./unicorn_scan.sh <target>
+
 set -euo pipefail
 IFS=$'\n\t'
+
+# Detect script directory reliably
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ====================
 # Colors
