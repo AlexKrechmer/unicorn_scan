@@ -54,26 +54,25 @@ TARGET=$1
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
-SMALL_WL="$WORDLIST_DIR/small.txt"
+SMALL_WL="$WORDLIST_DIR/raft-small-directories.txt"
 QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
-MEDIUM_WL="$WORDLIST_DIR/medium.txt"
+MEDIUM_WL="$WORDLIST_DIR/raft-medium-directories.txt"
 
 # Auto-clone SecLists if missing
 if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" ]]; then
     echo "[*] Gobuster wordlists missing, cloning SecLists..."
     git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$SCRIPT_DIR/tmp_sec"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/common.txt" "$SMALL_WL"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-small-directories.txt" "$SMALL_WL"
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/medium.txt" "$MEDIUM_WL"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-medium-directories.txt" "$MEDIUM_WL"
     rm -rf "$SCRIPT_DIR/tmp_sec"
 fi
 
 WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
-echo "[*] Gobuster wordlists ready:"
+echo "[*] Gobuster wordlists ready (order: small → quick → medium):"
 for wl in "${WORDLISTS[@]}"; do
     [ -f "$wl" ] && echo " - $wl"
 done
-
 # ====================
 # Unicorn Banner
 # ====================
