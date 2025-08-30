@@ -41,12 +41,11 @@ TARGET=$1
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # ====================
-# Wordlists for Gobuster (try defaults, fallback to SecLists)
+# Wordlists for Gobuster
 # ====================
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
-# Try multiple common Gobuster default paths
 GOBUSTER_DEFAULTS=(
     "/usr/share/gobuster/wordlists"
     "/usr/share/wordlists/gobuster"
@@ -61,7 +60,6 @@ for path in "${GOBUSTER_DEFAULTS[@]}"; do
     [ -f "$path/medium.txt" ] && MEDIUM_WL="$path/medium.txt"
 done
 
-# fallback to SecLists if Gobuster default missing
 [[ ! -f "$SMALL_WL" ]] && SMALL_WL="$WORDLIST_DIR/small.txt" && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
 [[ ! -f "$QUICKHIT_WL" ]] && QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt" && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
 [[ ! -f "$MEDIUM_WL" ]] && MEDIUM_WL="$WORDLIST_DIR/medium.txt" && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
@@ -84,9 +82,15 @@ echo -e "${TEAL}                                  |_____|                  ${NC}
 echo "[*] Starting Unicorn Scan on $TARGET"
 
 # ====================
-# Naabu Phase
+# Naabu Phase with blue ASCII
 # ====================
-echo -e "\n${BLUE}[*] Running Naabu...${NC}"
+echo -e "${BLUE}
+                  __       
+  ___  ___ ____ _/ /  __ __
+ / _ \/ _ \`/ _ \`/ _ \/ // /
+/_//_/\_,_/\_,_/_.__/\_,_/ 
+${NC}"
+
 PORTS=""
 if [ -n "$NAABU_BIN" ]; then
     PORTS=$($NAABU_BIN -host "$TARGET" -silent | awk -F: '{print $2?$2:$1}' | tr '\n' ',' | sed 's/,$//')
@@ -114,7 +118,7 @@ else
 fi
 
 # ====================
-# HTTPX Phase (live)
+# HTTPX Phase
 # ====================
 echo -e "${PURPLE}====================================================${NC}"
 echo -e "${PURPLE}               __    __  __            ${NC}"
@@ -132,7 +136,7 @@ if [ -n "$HTTPX_BIN" ] && [ -s "$NMAP_TMP" ]; then
 fi
 
 # ====================
-# Gobuster Phase (live)
+# Gobuster Phase
 # ====================
 echo -e "${GREEN}====================================================${NC}"
 echo -e "${GREEN}  _____       _               _            ${NC}"
@@ -143,6 +147,7 @@ echo -e "${GREEN} | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   ${NC}"
 echo -e "${GREEN}  \____/\___/|_.__/ \__,_|___/\__\___|_|   ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 
+# Always run if Gobuster exists and HTTP ports found
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
         [ -n "$url" ] && echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
@@ -150,12 +155,10 @@ if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
             [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q
         done
     done <<< "$HTTP_URLS"
-else
-    echo "[!] Gobuster not found or no HTTP services, skipping."
 fi
 
 # ====================
-# Nikto Phase (live)
+# Nikto Phase
 # ====================
 echo -e "${RED}====================================================${NC}"
 echo -e "${RED} _______  .__ __      __          ${NC}"
@@ -170,8 +173,6 @@ if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
         [ -n "$url" ] && echo -e "${RED}[*] Scanning $url with Nikto...${NC}" && $NIKTO_BIN -h "$url"
     done <<< "$HTTP_URLS"
-else
-    echo "[!] Nikto not found or no HTTP services, skipping."
 fi
 
 # ====================
