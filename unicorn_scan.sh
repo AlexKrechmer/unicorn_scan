@@ -125,7 +125,7 @@ else
 fi
 
 # ====================
-# HTTP URL Generation
+# HTTP URL Generation (fixed)
 # ====================
 echo -e "${PURPLE}
 ====================================================
@@ -143,6 +143,8 @@ HTTP_URLS=""
 for port in $HTTP_PORTS; do
     if [ "$port" = "80" ]; then
         HTTP_URLS+="http://$TARGET"$'\n'
+    elif [ "$port" = "443" ]; then
+        HTTP_URLS+="https://$TARGET"$'\n'
     else
         HTTP_URLS+="http://$TARGET:$port"$'\n'
     fi
@@ -212,3 +214,4 @@ fi
 # ====================
 rm -f "$NMAP_TMP"
 echo "[*] Unicorn Scan finished!"
+
