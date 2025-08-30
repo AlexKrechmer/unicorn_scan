@@ -27,7 +27,7 @@ cd unicorn_scan
 
 sudo apt update
 
-sudo apt install -y git curl wget nmap gobuster nikto tar
+sudo apt install -y git curl wget nmap nikto tar
 
 ⚠️ We skip golang-go from apt to avoid conflicts. We’ll install a self-contained Go 1.24.
 
@@ -63,16 +63,19 @@ export GO111MODULE=on
 
 go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
 go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+go install github.com/OJ/gobuster/v3@latest
 
 # Confirm binaries
 
 ls bin/
+ls -l ~/unicorn_scan/bin/
 
-# Should show 'naabu' and 'httpx'
+# Should show 'naabu'. gobster and 'httpx'
 
 5️⃣ Make Script Executable
 
 chmod +x unicorn_scan.sh
+
 6️⃣ Run the Script
 
 ./unicorn_scan.sh
