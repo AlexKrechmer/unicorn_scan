@@ -54,26 +54,13 @@ TARGET=$1
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
-# Use Gobuster's default wordlist paths if available
-GOBUSTER_DEFAULTS=(
-    "/usr/share/gobuster/wordlists"
-    "/usr/share/wordlists/gobuster"
-)
+SMALL_WL="$WORDLIST_DIR/small.txt"
+QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
+MEDIUM_WL="$WORDLIST_DIR/medium.txt"
 
-# Initialize empty
-SMALL_WL=""
-QUICKHIT_WL=""
-MEDIUM_WL=""
-for path in "${GOBUSTER_DEFAULTS[@]}"; do
-    [ -f "$path/common.txt" ] && [ -z "$SMALL_WL" ] && SMALL_WL="$path/common.txt"
-    [ -f "$path/quickhits.txt" ] && [ -z "$QUICKHIT_WL" ] && QUICKHIT_WL="$path/quickhits.txt"
-    [ -f "$path/medium.txt" ] && [ -z "$MEDIUM_WL" ] && MEDIUM_WL="$path/medium.txt"
-done
-
-# Fallback: download if missing
-[[ ! -f "$SMALL_WL" ]] && SMALL_WL="$WORDLIST_DIR/small.txt" && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
-[[ ! -f "$QUICKHIT_WL" ]] && QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt" && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
-[[ ! -f "$MEDIUM_WL" ]] && MEDIUM_WL="$WORDLIST_DIR/medium.txt" && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
+[[ ! -f "$SMALL_WL" ]] && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
+[[ ! -f "$QUICKHIT_WL" ]] && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
+[[ ! -f "$MEDIUM_WL" ]] && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
 
 WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
 echo "[*] Gobuster wordlists ready:"
@@ -131,7 +118,7 @@ else
 fi
 
 # ====================
-# HTTP URL Generation (with HTTPX fallback)
+# HTTP URL Generation
 # ====================
 echo -e "${PURPLE}
 ====================================================
@@ -147,7 +134,11 @@ ${NC}"
 HTTP_PORTS=$(awk '/open/ && $3 ~ /http/ {gsub("/tcp","",$1); print $1}' "$NMAP_TMP")
 HTTP_URLS=""
 for port in $HTTP_PORTS; do
-    HTTP_URLS+="http://$TARGET:$port"$'\n'
+    if [ "$port" = "80" ]; then
+        HTTP_URLS+="http://$TARGET"$'\n'
+    else
+        HTTP_URLS+="http://$TARGET:$port"$'\n'
+    fi
 done
 
 if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
@@ -172,10 +163,11 @@ ${NC}"
 
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && url="${url%/}"
+        [ -n "$url" ] || continue
+        url="${url%/}"
         echo -e "${GREEN}[*] Scanning $url with Gobuster wordlists...${NC}"
         for WL in "${WORDLISTS[@]}"; do
-            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q
+            [ -f "$WL" ] && $GOBUSTER_BIN dir -u "$url" -w "$WL" -q || true
         done
     done <<< "$HTTP_URLS"
 fi
@@ -196,9 +188,10 @@ ${NC}"
 
 if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] && url="${url%/}"
-        echo -e "${RED}[*] Scanning $url with Nikto...${NC}" 
-        $NIKTO_BIN -h "$url"
+        [ -n "$url" ] || continue
+        url="${url%/}"
+        echo -e "${RED}[*] Scanning $url with Nikto...${NC}"
+        $NIKTO_BIN -h "$url" || echo "[!] Nikto scan failed for $url"
     done <<< "$HTTP_URLS"
 fi
 
@@ -207,3 +200,4 @@ fi
 # ====================
 rm -f "$NMAP_TMP"
 echo "[*] Unicorn Scan finished!"
+
