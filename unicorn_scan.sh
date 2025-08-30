@@ -81,7 +81,7 @@ done
 echo -e "${PINK}           _                                               ${NC}"
 echo -e "${YELLOW} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ ${NC}"
 echo -e "${TEAL}/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \\ ${NC}"
-echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | | |   \__ \ (_| (_| | | | |${NC}"
+echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | |   \__ \ (_| (_| | | | |${NC}"
 echo -e "${YELLOW} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|${NC}"
 echo -e "${TEAL}                                  |_____|                  ${NC}"
 echo "[*] Starting Unicorn Scan on $TARGET"
@@ -125,7 +125,7 @@ else
 fi
 
 # ====================
-# HTTP URL Generation (fixed)
+# HTTP URL Generation
 # ====================
 echo -e "${PURPLE}
 ====================================================
@@ -154,10 +154,11 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
     HTTP_URLS=$($HTTPX_BIN -silent <<< "$HTTP_URLS" || echo "$HTTP_URLS")
 fi
 
+HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')  # remove blank lines
 [ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
 
 # ====================
-# Gobuster Phase (fixed)
+# Gobuster Phase (fully robust)
 # ====================
 echo -e "${GREEN}
 ====================================================
@@ -170,30 +171,22 @@ echo -e "${GREEN}
 ====================================================
 ${NC}"
 
-# define Gobuster binary
-GOBUSTER_BIN=$(which gobuster)  # make sure this finds your binary
-
-# define wordlists array
-WORDLISTS=(
-    "$SCRIPT_DIR/wordlists/raft-small-directories.txt"
-    "$SCRIPT_DIR/wordlists/quickhits.txt"
-    "$SCRIPT_DIR/wordlists/raft-medium-directories.txt"
-)
-
-# scan each URL line by line
-while IFS= read -r url; do
-    [ -z "$url" ] && continue
-    url="${url%/}"  # remove trailing slash
-    for WL in "${WORDLISTS[@]}"; do
-        if [ -f "$WL" ]; then
+if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
+    while IFS= read -r url; do
+        url="${url%/}"
+        [ -z "$url" ] && continue
+        for WL in "${WORDLISTS[@]}"; do
+            if [ ! -f "$WL" ]; then
+                echo -e "${RED}[!] Missing wordlist: $WL${NC}"
+                continue
+            fi
             echo -e "${YELLOW}[>] Gobuster blasting $url with: $(basename "$WL")${NC}"
             "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
-        else
-            echo -e "${RED}[!] Missing wordlist: $WL${NC}"
-        fi
-    done
-done <<< "$HTTP_URLS"
-
+        done
+    done <<< "$HTTP_URLS"
+else
+    echo "[!] Gobuster or HTTP URLs missing, skipping Gobuster phase."
+fi
 
 # ====================
 # Nikto Phase
@@ -211,8 +204,8 @@ ${NC}"
 
 if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
     while IFS= read -r url; do
-        [ -n "$url" ] || continue
         url="${url%/}"
+        [ -z "$url" ] && continue
         echo -e "${RED}[*] Scanning $url with Nikto...${NC}"
         $NIKTO_BIN -h "$url" || echo "[!] Nikto scan failed for $url"
     done <<< "$HTTP_URLS"
