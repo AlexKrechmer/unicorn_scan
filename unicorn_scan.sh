@@ -6,9 +6,6 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Detect script directory reliably
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # ====================
 # Colors
 # ====================
@@ -32,7 +29,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ====================
 find_tool() {
     local tool=$1
-    # Check custom script bin first
     for path in "$SCRIPT_DIR/bin/$tool" "$HOME/go/bin/$tool" "/usr/local/bin/$tool" "/usr/bin/$tool"; do
         [ -x "$path" ] && echo "$path" && return
     done
@@ -51,7 +47,6 @@ NIKTO_BIN=$(find_tool nikto)
 # ====================
 TARGET=$1
 [ -z "$TARGET" ] && { echo "Usage: $0 <target>"; exit 1; }
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # ====================
 # Wordlists for Gobuster
@@ -59,6 +54,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
 
+# Predefined Gobuster locations
 GOBUSTER_DEFAULTS=(
     "/usr/share/gobuster/wordlists"
     "/usr/share/wordlists/gobuster"
@@ -73,6 +69,7 @@ for path in "${GOBUSTER_DEFAULTS[@]}"; do
     [ -f "$path/medium.txt" ] && MEDIUM_WL="$path/medium.txt"
 done
 
+# Fallback: download if missing
 [[ ! -f "$SMALL_WL" ]] && SMALL_WL="$WORDLIST_DIR/small.txt" && curl -sSL -o "$SMALL_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
 [[ ! -f "$QUICKHIT_WL" ]] && QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt" && curl -sSL -o "$QUICKHIT_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/quickhits.txt"
 [[ ! -f "$MEDIUM_WL" ]] && MEDIUM_WL="$WORDLIST_DIR/medium.txt" && curl -sSL -o "$MEDIUM_WL" "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/medium.txt"
@@ -146,19 +143,16 @@ echo -e "${PURPLE}
 ====================================================
 ${NC}"
 
-# Extract HTTP ports from Nmap
 HTTP_PORTS=$(awk '/open/ && $3 ~ /http/ {gsub("/tcp","",$1); print $1}' "$NMAP_TMP")
 HTTP_URLS=""
 for port in $HTTP_PORTS; do
     HTTP_URLS+="http://$TARGET:$port"$'\n'
 done
 
-# Run through HTTPX if installed, fallback silently
 if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
     HTTP_URLS=$($HTTPX_BIN -silent <<< "$HTTP_URLS" || echo "$HTTP_URLS")
 fi
 
-# Show URLs
 [ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
 
 # ====================
