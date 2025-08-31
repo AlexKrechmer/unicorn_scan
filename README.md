@@ -68,7 +68,6 @@ go install github.com/OJ/gobuster/v3@latest
 # Confirm binaries
 
 ls bin/
-ls -l ~/unicorn_scan/bin/
 
 # Should show 'naabu'. gobster and 'httpx'
 
