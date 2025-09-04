@@ -86,5 +86,5 @@ The local go/bin and bin folders contain all executables.
 
 If you open a new shell, run export PATH=$PWD/go/bin:$PWD/bin:$PATH again inside the project folder.
 
-Naabu, HTTPX, Nmap, Gobuster, and Nikto will all work together inside unicorn_scan.sh.
+Naabu, HTTPX, Nmap, Gobuster, and Nuclei will all work together inside unicorn_scan.sh.
 For my daughter — this unicorn theme is dedicated to you. 🦄     
