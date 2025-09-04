@@ -163,11 +163,13 @@ echo "/_/ /_/\__/\__/ .___/_/|_|            "
 echo "             /_/                      "
 echo "===================================================="
 echo -e "${NC}"
+# ensure the array exists
+declare -A HTTPX_MAP
 
 if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
     TMP_HTTP=$(mktemp)
-    trap 'rm -f "$TMP_HTTP"' EXIT
     echo "$HTTP_URLS" > "$TMP_HTTP"
+    trap 'rm -f "$TMP_HTTP"' EXIT
 
     HTTPX_RESULTS=$(
         $HTTPX_BIN -list "$TMP_HTTP" \
@@ -180,6 +182,10 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
             -vhost \
             -no-color
     )
+
+    # initialize empty array safely
+    HTTPX_MAP=()
+
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         url=$(echo "$line" | awk '{print $1}')
@@ -196,6 +202,8 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
         echo -e "${YELLOW}[!] No responsive HTTP URLs found.${NC}"
     fi
 else
+    # still declare it to prevent unbound errors downstream
+    declare -A HTTPX_MAP
     echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
 fi
 # ====================
