@@ -15,9 +15,15 @@ GREEN="\033[1;32m"
 YELLOW="\033[0;93m"
 BLUE="\033[1;34m"
 PURPLE="\033[1;35m"
-PINK="\033[1;95m"
 TEAL="\033[1;36m"
 ORANGE="\033[1;33m"
+
+# ====================
+# Associative arrays
+# ====================
+declare -A HTTPX_MAP
+declare -A GOBUSTER_RESULTS
+declare -A NUCLEI_RESULTS
 
 # ====================
 # Script directory
@@ -77,13 +83,13 @@ WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL")
 # ASCII Banner
 # ====================
 print_banner() {
-    echo -e "${YELLOW}${TEAL}${PINK}$"
-  echo "           _                                               "
-echo " /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ "
-echo "/ / \ \ '_ \| |/ __/ _ \| '__| '_ \   / __|/ __/ _\` | '_ \\"
-echo "\ \_/ / | | | | (_| (_) | |  | | |     \__ \ (_| (_| | | | | "
-echo " \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|"
-echo "                                  |_____|                  "
+    echo -e "${YELLOW}${TEAL}$"
+    echo "           _                                               "
+    echo " /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ "
+    echo "/ / \ \ '_ \| |/ __/ _ \| '__| '_ \   / __|/ __/ _\` | '_ \\"
+    echo "\ \_/ / | | | | (_| (_) | |  | | |     \__ \ (_| (_| | | | | "
+    echo " \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|"
+    echo "                                  |_____|                  "
     echo -e "${NC}"
 }
 print_banner
@@ -95,8 +101,8 @@ echo -e "${GREEN}[*] Starting Unicorn Scan on $TARGET${NC}"
 echo -e "${PURPLE}"
 echo "===================================================="
 echo "                  __       "
-echo      ___  ___ ____ _/ /  __ __"
-echo " / _ \/ _ \`/ _ \`/ _ \/ // /"
+echo "      ___  ___ ____ _/ /  __ __"
+echo " / _ \/ _ \/ _ \/ _ \/ // /"
 echo "/_//_/\_,_/\_,_/_.__/\_,_/ "
 echo "===================================================="
 echo -e "${NC}"
@@ -123,24 +129,29 @@ echo "===================================================="
 echo -e "${NC}"
 
 NMAP_TMP=$(mktemp)
+trap 'rm -f "$NMAP_TMP"' EXIT
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
     echo -e "${ORANGE}[*] Running Nmap on discovered ports...${NC}"
     $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > "$NMAP_TMP"
 else
     echo -e "${RED}[!] No ports found or Nmap missing, skipping.${NC}"
 fi
+
 # Generate HTTP URLs from discovered ports
 HTTP_URLS=""
 if [ -n "$PORTS" ]; then
     for p in $(echo "$PORTS" | tr ',' ' '); do
         proto="http"
+        url="$TARGET"
         [[ "$p" == "443" || "$p" == "8443" ]] && proto="https"
-        HTTP_URLS+="$proto://$TARGET:$p"$'\n'
+        [[ "$p" != "80" && "$p" != "443" ]] && url="$TARGET:$p"
+        HTTP_URLS+="$proto://$url"$'\n'
     done
     HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')
 fi
+
 # ====================
-# HTTPX Phase (robust with metadata)
+# HTTPX Phase
 # ====================
 echo -e "${BLUE}"
 echo "===================================================="
@@ -153,9 +164,9 @@ echo "             /_/                      "
 echo "===================================================="
 echo -e "${NC}"
 
-declare -A HTTPX_MAP
 if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
     TMP_HTTP=$(mktemp)
+    trap 'rm -f "$TMP_HTTP"' EXIT
     echo "$HTTP_URLS" > "$TMP_HTTP"
 
     HTTPX_RESULTS=$(
@@ -169,8 +180,6 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
             -vhost \
             -no-color
     )
-    rm -f "$TMP_HTTP"
-
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         url=$(echo "$line" | awk '{print $1}')
@@ -189,11 +198,9 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
 else
     echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
 fi
-
 # ====================
-# Gobuster Phase (capture results)
+# Gobuster Phase
 # ====================
-declare -A GOBUSTER_RESULTS
 echo -e "${GREEN}"
 echo "===================================================="
 echo "  _____       _               _            "
@@ -211,11 +218,9 @@ if [ -n "$GOBUSTER_BIN" ] && [ ${#HTTPX_MAP[@]} -gt 0 ]; then
         for url in "${!HTTPX_MAP[@]}"; do
             [ -z "$url" ] && continue
             TMP_GOB=$(mktemp)
+            trap 'rm -f "$TMP_GOB"' EXIT
             $GOBUSTER_BIN dir -u "$url" -w "$WL" -x php,html -t 50 -o "$TMP_GOB" -q
-            while IFS= read -r line; do
-                [[ -z "$line" ]] && continue
-                GOBUSTER_RESULTS["$url"]+="$line"$'\n'
-            done < "$TMP_GOB"
+            [[ -s "$TMP_GOB" ]] && GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
             rm -f "$TMP_GOB"
         done
     done
@@ -224,9 +229,8 @@ else
 fi
 
 # ====================
-# Nuclei Phase (capture results)
+# Nuclei Phase
 # ====================
-declare -A NUCLEI_RESULTS
 echo -e "${RED}"
 echo "===================================================="
 echo "                     .__         .__ "
@@ -242,8 +246,9 @@ if [ -n "$NUCLEI_BIN" ] && [ ${#HTTPX_MAP[@]} -gt 0 ]; then
     for url in "${!HTTPX_MAP[@]}"; do
         [ -z "$url" ] && continue
         TMP_NUC=$(mktemp)
+        trap 'rm -f "$TMP_NUC"' EXIT
         $NUCLEI_BIN -u "$url" -silent -o "$TMP_NUC" || echo "[!] Nuclei scan failed for $url"
-        [[ -s "$TMP_NUC" ]] && NUCLEI_RESULTS["$url"]="$(cat $TMP_NUC)"
+        [[ -s "$TMP_NUC" ]] && NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
         rm -f "$TMP_NUC"
     done
 else
@@ -258,24 +263,37 @@ echo -e "${GREEN}
 UNICORN SCAN SUMMARY
 Target: $TARGET
 Open Ports: ${PORTS:-None}
-
+====================================================
 HTTP URLs Discovered:
-"
-for url in "${!HTTPX_MAP[@]}"; do
-    echo "$url -> ${HTTPX_MAP[$url]}"
-done
+${NC}"
+
+if [ ${#HTTPX_MAP[@]} -gt 0 ]; then
+    for url in "${!HTTPX_MAP[@]}"; do
+        echo "$url -> ${HTTPX_MAP[$url]}"
+    done
+else
+    echo -e "${YELLOW}[!] No HTTP URLs found.${NC}"
+fi
 
 echo -e "\nGobuster Results:"
-for url in "${!GOBUSTER_RESULTS[@]}"; do
-    echo -e "$url:"
-    echo -e "${GOBUSTER_RESULTS[$url]}"
-done
+if [ ${#GOBUSTER_RESULTS[@]} -gt 0 ]; then
+    for url in "${!GOBUSTER_RESULTS[@]}"; do
+        echo -e "$url:"
+        echo -e "${GOBUSTER_RESULTS[$url]}"
+    done
+else
+    echo -e "${YELLOW}[!] No Gobuster results.${NC}"
+fi
 
 echo -e "\nNuclei Results:"
-for url in "${!NUCLEI_RESULTS[@]}"; do
-    echo -e "$url:"
-    echo -e "${NUCLEI_RESULTS[$url]}"
-done
+if [ ${#NUCLEI_RESULTS[@]} -gt 0 ]; then
+    for url in "${!NUCLEI_RESULTS[@]}"; do
+        echo -e "$url:"
+        echo -e "${NUCLEI_RESULTS[$url]}"
+    done
+else
+    echo -e "${YELLOW}[!] No Nuclei results.${NC}"
+fi
 
 echo -e "
 Wordlists Used: ${WORDLISTS[*]}
