@@ -1,7 +1,7 @@
 #!/bin/bash
-# unicorn_scan.sh - Automated Recon Script (Live output + default repo wordlists)
+# unicorn_scan.sh - Full-featured Automated Recon Script
 # By Alex 🦄
-# Safe to run with: sudo ./unicorn_scan.sh <target>
+# Usage: sudo ./unicorn_scan.sh <target>
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -12,12 +12,12 @@ IFS=$'\n\t'
 NC="\033[0m"
 RED="\033[1;31m"
 GREEN="\033[1;32m"
-ORANGE="\033[1;33m"
+YELLOW="\033[0;93m"
 BLUE="\033[1;34m"
 PURPLE="\033[1;35m"
 PINK="\033[1;95m"
 TEAL="\033[1;36m"
-YELLOW="\033[1;93m"
+ORANGE="\033[1;33m"
 
 # ====================
 # Script directory
@@ -40,16 +40,16 @@ NAABU_BIN=$(find_tool naabu)
 NMAP_BIN=$(find_tool nmap)
 HTTPX_BIN=$(find_tool httpx)
 GOBUSTER_BIN=$(find_tool gobuster)
-NIKTO_BIN=$(find_tool nikto)
+NUCLEI_BIN=$(find_tool nuclei)
 
 # ====================
 # Target
 # ====================
-TARGET=$1
-[ -z "$TARGET" ] && { echo "Usage: $0 <target>"; exit 1; }
+TARGET="${1:-}"
+[ -z "$TARGET" ] && { echo -e "${RED}[!] Usage: $0 <target>${NC}"; exit 1; }
 
 # ====================
-# Wordlists for Gobuster
+# Wordlists
 # ====================
 WORDLIST_DIR="$SCRIPT_DIR/wordlists"
 mkdir -p "$WORDLIST_DIR"
@@ -57,162 +57,204 @@ mkdir -p "$WORDLIST_DIR"
 SMALL_WL="$WORDLIST_DIR/raft-small-directories.txt"
 QUICKHIT_WL="$WORDLIST_DIR/quickhits.txt"
 MEDIUM_WL="$WORDLIST_DIR/raft-medium-directories.txt"
+COMMON_WL="$WORDLIST_DIR/common.txt"
 
-if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" ]]; then
-    echo "[*] Gobuster wordlists missing, cloning SecLists..."
+if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" || ! -f "$COMMON_WL" ]]; then
+    echo -e "${YELLOW}[*] Wordlists missing, cloning SecLists...${NC}"
     git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$SCRIPT_DIR/tmp_sec"
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-small-directories.txt" "$SMALL_WL"
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL"
     cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-medium-directories.txt" "$MEDIUM_WL"
+    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/common.txt" "$COMMON_WL"
     rm -rf "$SCRIPT_DIR/tmp_sec"
 else
-    echo "[*] Wordlists already present, skipping clone."
+    echo -e "${GREEN}[*] Wordlists already present.${NC}"
 fi
 
-WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL")
-echo "[*] Gobuster wordlists ready (order: small → quick → medium):"
-for wl in "${WORDLISTS[@]}"; do
-    [ -f "$wl" ] && echo " - $wl"
-done
+WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL")
 
 # ====================
-# Unicorn Banner
+# ASCII Banner
 # ====================
-echo -e "${PINK}           _                                               ${NC}"
-echo -e "${YELLOW} /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ ${NC}"
-echo -e "${TEAL}/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \\ ${NC}"
-echo -e "${PINK}\\ \_/ / | | | | (_| (_) | |  | | |   \__ \ (_| (_| | | | |${NC}"
-echo -e "${YELLOW} \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|${NC}"
-echo -e "${TEAL}                                  |_____|                  ${NC}"
-echo "[*] Starting Unicorn Scan on $TARGET"
+print_banner() {
+    echo -e "${YELLOW}${TEAL}${PINK}${PURPLE}"
+    echo "           _                                               "
+echo " /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ "
+echo "/ / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _\` | '_ \\"
+echo "\ \_/ / | | | | (_| (_) | |  | | |   \__ \ (_| (_| | | | |"
+echo " \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|"
+echo "                                  |_____|                  "
+    echo -e "${NC}"
+}
+print_banner
+echo -e "${GREEN}[*] Starting Unicorn Scan on $TARGET${NC}"
 
 # ====================
 # Naabu Phase
 # ====================
-echo -e "${BLUE}
-                  __       
-  ___  ___ ____ _/ /  __ __
- / _ \/ _ \`/ _ \`/ _ \/ // /
-/_//_/\_,_/\_,_/_.__/\_,_/ 
-${NC}"
+echo -e "${PURPLE}"
+echo "===================================================="
+echo "                  __       "
+echo "  ___  ___ ____ _/ /  __ __"
+echo " / _ \/ _ \`/ _ \`/ _ \/ // /"
+echo "/_//_/\_,_/\_,_/_.__/\_,_/ "
+echo "===================================================="
+echo -e "${NC}"
 
 PORTS=""
 if [ -n "$NAABU_BIN" ]; then
-    PORTS=$($NAABU_BIN -host "$TARGET" -silent | awk -F: '{print $2?$2:$1}' | sort -nu | tr '\n' ',' | sed 's/,$//')
-    [ -n "$PORTS" ] && echo "[*] Discovered ports: $PORTS"
+    echo -e "${BLUE}[*] Running Naabu to discover open ports...${NC}"
+    PORTS=$($NAABU_BIN -host "$TARGET" -silent 2>/dev/null | awk -F: '{print $2?$2:$1}' | sort -nu | tr '\n' ',' | sed 's/,$//')
+    [ -n "$PORTS" ] && echo -e "${GREEN}[*] Discovered ports: $PORTS${NC}"
 else
-    echo "[!] Naabu not found, skipping."
+    echo -e "${RED}[!] Naabu not found, skipping port discovery.${NC}"
 fi
 
 # ====================
 # Nmap Phase
 # ====================
-echo -e "${ORANGE}
-====================================================
- .-----.--------.---.-.-----.
- |     |        |  _  |  _  |
- |__|__|__|__|__|___._|   __|
-                      |__|   
-====================================================
-${NC}"
+echo -e "${YELLOW}"
+echo "===================================================="
+echo " .-----.--------.---.-.-----."
+echo " |     |        |  _  |  _  |"
+echo " |__|__|__|__|__|___._|   __|"
+echo "                      |__|   "
+echo "===================================================="
+echo -e "${NC}"
 
 NMAP_TMP=$(mktemp)
 if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
     echo -e "${ORANGE}[*] Running Nmap on discovered ports...${NC}"
     $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > "$NMAP_TMP"
 else
-    echo "[!] No ports found or Nmap missing, skipping."
+    echo -e "${RED}[!] No ports found or Nmap missing, skipping.${NC}"
 fi
-
-# ====================
-# HTTP URL Generation
-# ====================
-echo -e "${PURPLE}
-====================================================
-               __    __  __            
-   / /_  / /_/ /_____  _  __          
-  / __ \\/ __/ __/ __ \\| |/_/          
- / / / / /_/ /_/ /_/ />  <            
-/_/ /_/\\__/\\__/ .___/_/|_|            
-             /_/                      
-====================================================
-${NC}"
-
-HTTP_PORTS=$(awk '/open/ && $3 ~ /http/ {gsub("/tcp","",$1); print $1}' "$NMAP_TMP")
+# Generate HTTP URLs from discovered ports
 HTTP_URLS=""
-for port in $HTTP_PORTS; do
-    if [ "$port" = "80" ]; then
-        HTTP_URLS+="http://$TARGET"$'\n'
-    elif [ "$port" = "443" ]; then
-        HTTP_URLS+="https://$TARGET"$'\n'
-    else
-        HTTP_URLS+="http://$TARGET:$port"$'\n'
-    fi
-done
-
+if [ -n "$PORTS" ]; then
+    for p in $(echo "$PORTS" | tr ',' ' '); do
+        proto="http"
+        [[ "$p" == "443" || "$p" == "8443" ]] && proto="https"
+        HTTP_URLS+="$proto://$TARGET:$p"$'\n'
+    done
+    HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')
+fi
+# ====================
+# HTTPX Phase
+# ====================
+echo -e "${BLUE}"
+echo "===================================================="
+echo "               __    __  __            "
+echo "   / /_  / /_/ /_____  _  __          "
+echo "  / __ \/ __/ __/ __ \| |/_/          "
+echo " / / / / /_/ /_/ /_/ />  <            "
+echo "/_/ /_/\__/\__/ .___/_/|_|            "
+echo "             /_/                      "
+echo "===================================================="
+echo -e "${BLUE}"
 if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
-    HTTP_URLS=$($HTTPX_BIN -silent <<< "$HTTP_URLS" || echo "$HTTP_URLS")
+    echo -e "${BLUE}[*] Running robust httpx scan on discovered URLs...${NC}"
+
+    TMP_HTTP=$(mktemp)
+    echo "$HTTP_URLS" > "$TMP_HTTP"
+
+    # Full but bounded scan
+    HTTPX_RESULTS=$(
+        $HTTPX_BIN -list "$TMP_HTTP" \
+            -silent \
+            -threads 50 \
+            -timeout 10 \
+            -status-code \
+            -follow-redirects \
+            -ports 80,443,8080,8443,8000,5000,3000 \
+            -title \
+            -vhost \
+            -no-color
+    )
+
+    rm -f "$TMP_HTTP"
+
+    # Keep only non-empty lines
+    HTTP_URLS=$(echo "$HTTPX_RESULTS" | sed '/^\s*$/d')
+
+    if [ -n "$HTTP_URLS" ]; then
+        echo -e "${GREEN}[*] Live HTTP URLs discovered:${NC}\n$HTTP_URLS"
+    else
+        echo -e "${YELLOW}[!] No responsive HTTP URLs found.${NC}"
+    fi
+else
+    echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
 fi
 
-HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')  # remove blank lines
-[ -n "$HTTP_URLS" ] && echo -e "${GREEN}[*] HTTP URLs:${NC}\n$HTTP_URLS"
-
-## ====================
-# Gobuster Phase (fully robust)
 # ====================
-echo -e "${GREEN}
-====================================================
-  _____       _               _            
- |  __ \\     | |             | |           
- | |  \\/ ___ | |__  _   _ ___| |_ ___ _ __ 
- | | __ / _ \\| '_ \\| | | / __| __/ _ \\ '__|
- | |_\\ \\ (_) | |_) | |_| \\__ \\ ||  __/ |   
-  \\____/\\___/|_.__/ \\__,_|___/\\__\\___|_|   
-====================================================
-${NC}"
-
+# Gobuster scans
+# ====================
+echo -e "${GREEN}"
+echo "===================================================="
+echo "  _____       _               _            "
+echo " |  __ \     | |             | |           "
+echo " | |  \/ ___ | |__  _   _ ___| |_ ___ _ __ "
+echo " | | __ / _ \| '_ \| | | / __| __/ _ \ '__|"
+echo " | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   "
+echo "  \____/\___/|_.__/ \__,_|___/\__\___|_|   "
+echo "===================================================="
+echo -e "${NC}"
 if [ -n "$GOBUSTER_BIN" ] && [ -n "$HTTP_URLS" ]; then
+    echo -e "${YELLOW}[*] Starting Gobuster scans on live URLs...${NC}"
+    for WL in "${WORDLISTS[@]}"; do
+        echo -e "${YELLOW}[*] Using wordlist: $WL${NC}"
+        while IFS= read -r url; do
+            [ -z "$url" ] && continue
+            $GOBUSTER_BIN dir -u "$url" -w "$WL" -x php,html -t 50 -q
+        done <<< "$HTTP_URLS"
+    done
+else
+    echo -e "${YELLOW}[*] Gobuster skipped (missing tool or no live URLs).${NC}"
+fi
+
+# ====================
+# Nuclei scans
+# ====================
+echo -e "${RED}"
+echo "===================================================="
+echo "                     .__         .__ "
+echo "  ____  __ __   ____ |  |   ____ |__|"
+echo " /    \|  |  \_/ ___\|  | _/ __ \|  |"
+echo "|   |  \  |  /\  \___|  |_\  ___/|  |"
+echo "|___|  /____/  \___  >____/\___  >__|"
+echo "     \/            \/          \/    "
+echo "===================================================="
+echo -e "${NC}"
+if [ -n "$NUCLEI_BIN" ] && [ -n "$HTTP_URLS" ]; then
+    echo -e "${BLUE}[*] Running Nuclei scans on live URLs...${NC}"
     while IFS= read -r url; do
-        url="${url%/}"              # remove trailing slash
-        [ -z "$url" ] && continue   # skip empty lines
-        for WL in "${WORDLISTS[@]}"; do
-            [ ! -f "$WL" ] && continue  # skip missing wordlists
-            echo -e "${YELLOW}[>] Gobuster blasting $url with: $(basename "$WL")${NC}"
-            # Force -u and -w with quotes, swallow errors
-            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -q \
-                -o "$SCRIPT_DIR/gobuster_$(basename "$WL" .txt).txt" || true
-        done
+        url="${url%/}"  # remove trailing slash
+        [ -z "$url" ] && continue
+        $NUCLEI_BIN -u "$url" -silent || echo "[!] Nuclei scan failed for $url"
     done <<< "$HTTP_URLS"
 else
-    echo "[!] Gobuster or HTTP URLs missing, skipping Gobuster phase."
-fi
-
-# ====================
-# Nikto Phase
-# ====================
-echo -e "${RED}
-====================================================
- _______  .__ __      __          
- \\      \\ |__|  | ___/  |_  ____  
- /   |   \\|  |  |/ /\\   __\\/  _ \\ 
-/    |    \\  |    <  |  | (  <_> )
-\\____|__  /__|__|_ \\ |__|  \\____/ 
-        \/        \/              
-====================================================
-${NC}"
-
-if [ -n "$NIKTO_BIN" ] && [ -n "$HTTP_URLS" ]; then
-    while IFS= read -r url; do
-        url="${url%/}"
-        [ -z "$url" ] && continue
-        echo -e "${RED}[*] Scanning $url with Nikto...${NC}"
-        $NIKTO_BIN -h "$url" || echo "[!] Nikto scan failed for $url"
-    done <<< "$HTTP_URLS"
+    echo -e "${BLUE}[*] Nuclei skipped (missing tool or no live URLs).${NC}"
 fi
 
 # ====================
 # Cleanup
 # ====================
 rm -f "$NMAP_TMP"
-echo "[*] Unicorn Scan finished!"
+
+# ====================
+# Summary
+# ====================
+echo -e "${GREEN}
+====================================================
+UNICORN SCAN SUMMARY
+Target: $TARGET
+Open Ports:${PORTS:-None}
+HTTP URLs Discovered:
+${HTTP_URLS:-None}
+Wordlists Used: ${WORDLISTS[*]}
+Nuclei Run: Completed
+Gobuster Run: Completed
+====================================================
+[*] Unicorn Scan finished!
+${NC}"
 
