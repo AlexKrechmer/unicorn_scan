@@ -163,10 +163,9 @@ echo "/_/ /_/\__/\__/ .___/_/|_|            "
 echo "             /_/                      "
 echo "===================================================="
 echo -e "${NC}"
-# ensure the array exists
-declare -A HTTPX_MAP
 
-if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
+declare -A HTTPX_MAP
+if [[ -n "$HTTPX_BIN" && -n "$HTTP_URLS" ]]; then
     TMP_HTTP=$(mktemp)
     echo "$HTTP_URLS" > "$TMP_HTTP"
     trap 'rm -f "$TMP_HTTP"' EXIT
@@ -183,9 +182,6 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
             -no-color
     )
 
-    # initialize empty array safely
-    HTTPX_MAP=()
-
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         url=$(echo "$line" | awk '{print $1}')
@@ -193,17 +189,15 @@ if [ -n "$HTTPX_BIN" ] && [ -n "$HTTP_URLS" ]; then
         HTTPX_MAP["$url"]="$meta"
     done <<< "$HTTPX_RESULTS"
 
-    if [ ${#HTTPX_MAP[@]} -gt 0 ]; then
+    if [[ ${#HTTPX_MAP[@]} -gt 0 ]]; then
         echo -e "${GREEN}[*] Live HTTP URLs discovered:${NC}"
         for u in "${!HTTPX_MAP[@]}"; do
-            echo -e "$u -> ${HTTPX_MAP[$u]}"
+            echo "$u -> ${HTTPX_MAP[$u]}"
         done
     else
         echo -e "${YELLOW}[!] No responsive HTTP URLs found.${NC}"
     fi
 else
-    # still declare it to prevent unbound errors downstream
-    declare -A HTTPX_MAP
     echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
 fi
 # ====================
@@ -220,13 +214,12 @@ echo "  \____/\___/|_.__/ \__,_|___/\__\___|_|   "
 echo "===================================================="
 echo -e "${NC}"
 
-if [ -n "$GOBUSTER_BIN" ] && [ ${#HTTPX_MAP[@]} -gt 0 ]; then
+declare -A GOBUSTER_RESULTS
+if [[ -n "$GOBUSTER_BIN" && ${#HTTPX_MAP[@]} -gt 0 ]]; then
     for WL in "${WORDLISTS[@]}"; do
         echo -e "${YELLOW}[*] Using wordlist: $WL${NC}"
         for url in "${!HTTPX_MAP[@]}"; do
-            [ -z "$url" ] && continue
             TMP_GOB=$(mktemp)
-            trap 'rm -f "$TMP_GOB"' EXIT
             $GOBUSTER_BIN dir -u "$url" -w "$WL" -x php,html -t 50 -o "$TMP_GOB" -q
             [[ -s "$TMP_GOB" ]] && GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
             rm -f "$TMP_GOB"
@@ -250,11 +243,10 @@ echo "     \/            \/          \/    "
 echo "===================================================="
 echo -e "${NC}"
 
-if [ -n "$NUCLEI_BIN" ] && [ ${#HTTPX_MAP[@]} -gt 0 ]; then
+declare -A NUCLEI_RESULTS
+if [[ -n "$NUCLEI_BIN" && ${#HTTPX_MAP[@]} -gt 0 ]]; then
     for url in "${!HTTPX_MAP[@]}"; do
-        [ -z "$url" ] && continue
         TMP_NUC=$(mktemp)
-        trap 'rm -f "$TMP_NUC"' EXIT
         $NUCLEI_BIN -u "$url" -silent -o "$TMP_NUC" || echo "[!] Nuclei scan failed for $url"
         [[ -s "$TMP_NUC" ]] && NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
         rm -f "$TMP_NUC"
@@ -275,7 +267,7 @@ Open Ports: ${PORTS:-None}
 HTTP URLs Discovered:
 ${NC}"
 
-if [ ${#HTTPX_MAP[@]} -gt 0 ]; then
+if [[ ${#HTTPX_MAP[@]} -gt 0 ]]; then
     for url in "${!HTTPX_MAP[@]}"; do
         echo "$url -> ${HTTPX_MAP[$url]}"
     done
@@ -284,9 +276,9 @@ else
 fi
 
 echo -e "\nGobuster Results:"
-if [ ${#GOBUSTER_RESULTS[@]} -gt 0 ]; then
+if [[ ${#GOBUSTER_RESULTS[@]} -gt 0 ]]; then
     for url in "${!GOBUSTER_RESULTS[@]}"; do
-        echo -e "$url:"
+        echo "$url:"
         echo -e "${GOBUSTER_RESULTS[$url]}"
     done
 else
@@ -294,9 +286,9 @@ else
 fi
 
 echo -e "\nNuclei Results:"
-if [ ${#NUCLEI_RESULTS[@]} -gt 0 ]; then
+if [[ ${#NUCLEI_RESULTS[@]} -gt 0 ]]; then
     for url in "${!NUCLEI_RESULTS[@]}"; do
-        echo -e "$url:"
+        echo "$url:"
         echo -e "${NUCLEI_RESULTS[$url]}"
     done
 else
