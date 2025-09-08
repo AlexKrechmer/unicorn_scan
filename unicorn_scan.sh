@@ -218,7 +218,7 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase (dynamic ports) — PARROT/Bash 4 SAFE
+# HTTPX Phase
 # ====================
 echo -e "${BLUE}
 ====================================================
@@ -228,123 +228,94 @@ echo -e "${BLUE}
  / / / /_/ /_/ /_/ />  <            
 /_/ /_/\__/\__/ .___/_/|_|            
              /_/                      
-====================================================${NC}"
+====================================================
+${NC}"
 
-# Initialize HTTPX_MAP
-HTTPX_MAP=()
+declare -A HTTPX_MAP
+HTTP_PORTS=(80 443)
 
-if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
-    TMP_HTTP="$TMP_DIR/httpx.in"
-    TMP_HTTP_OUT="$TMP_DIR/httpx.out"
-    TMP_FILES+=("$TMP_HTTP" "$TMP_HTTP_OUT")
-
-    echo -e "${BLUE}[*] Generating candidate URLs from discovered ports...${NC}"
-    > "$TMP_HTTP"
-    for port in ${PORTS//,/ }; do
-        proto="http"
-        [[ "$port" == "443" || "$port" == "8443" || "$port" == "7443" ]] && proto="https"
-        if { [[ "$proto" == "http" && "$port" != "80" ]] || [[ "$proto" == "https" && "$port" != "443" ]]; }; then
-            echo "$proto://$TARGET:$port" >> "$TMP_HTTP"
+for port in "${PORTS[@]}"; do
+    for proto in http https; do
+        # Only default ports can omit :port
+        if [[ "$port" -eq 80 && "$proto" == "http" ]] || [[ "$port" -eq 443 && "$proto" == "https" ]]; then
+            HTTPX_MAP["$proto://$TARGET"]="$port"
         else
-            echo "$proto://$TARGET" >> "$TMP_HTTP"
+            HTTPX_MAP["$proto://$TARGET:$port"]="$port"
+        fi
+    done
+done
+
+# Run HTTPX
+if [[ ${#HTTPX_MAP[@]} -gt 0 ]]; then
+    HTTPX_OUTPUT=()
+    for url in "${!HTTPX_MAP[@]}"; do
+        out=$("$HTTPX_BIN" -silent -timeout 5 -status-code -title -u "$url" 2>/dev/null)
+        if [[ -n "$out" ]]; then
+            HTTPX_OUTPUT+=("$url")
         fi
     done
 
-    sort -u "$TMP_HTTP" -o "$TMP_HTTP"
-    sed -i '/^\s*$/d' "$TMP_HTTP"
-
-    if [[ ! -s "$TMP_HTTP" ]]; then
-        echo -e "${YELLOW}[!] No candidate URLs for HTTPX. Skipping HTTP scan.${NC}"
-    else
-        echo -e "${BLUE}[*] Running httpx on candidate URLs...${NC}"
-        "$HTTPX_BIN" -list "$TMP_HTTP" -threads 50 -timeout 10 \
-            -status-code -follow-redirects -title -vhost -no-color > "$TMP_HTTP_OUT" 2>/dev/null || true
-
-        # Populate HTTPX_MAP safely
-        if [[ -s "$TMP_HTTP_OUT" ]]; then
-            while IFS= read -r line; do
-                [[ -z "$line" ]] && continue
-                url=$(echo "$line" | awk '{print $1}')
-                meta=$(echo "$line" | cut -d' ' -f2-)
-                [[ -n "$url" ]] && HTTPX_MAP["$url"]="$meta"
-            done < "$TMP_HTTP_OUT"
-        fi
-
-        # Fallback if httpx returned nothing
-        if [[ ${#HTTPX_MAP[@]} -eq 0 ]]; then
-            echo -e "${YELLOW}[!] httpx returned nothing, falling back to candidate URLs.${NC}"
-            while IFS= read -r url; do
-                [[ -n "$url" ]] && HTTPX_MAP["$url"]="Fallback"
-            done < "$TMP_HTTP"
-        fi
-
-        echo -e "${GREEN}[*] HTTP URLs to scan:${NC}"
-        for url in "${!HTTPX_MAP[@]}"; do
-            echo "$url -> ${HTTPX_MAP[$url]}"
-        done
+    if [[ ${#HTTPX_OUTPUT[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}[!] HTTPX returned nothing, using fallback URLs${NC}"
+        HTTPX_OUTPUT=("${!HTTPX_MAP[@]}")
     fi
 else
-    echo -e "${RED}[!] httpx not available or no ports discovered — skipping HTTP scan.${NC}"
+    echo -e "${RED}[!] No candidate HTTP URLs found${NC}"
+    exit 1
 fi
+
 # ====================
 # Gobuster Phase
 # ====================
-echo -e "${GREEN}"
-echo "===================================================="
-echo "  _____       _               _            "
-echo " |  __ \     | |             | |           "
-echo " | |  \/ ___ | |__  _   _ ___| |_ ___ _ __ "
-echo " | | __ / _ \| '_ \| | | / __| __/ _ \ '__|"
-echo " | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   "
-echo "  \____/\___/|_.__/ \__,_|___/\__\___|_|   "
-echo "===================================================="
-echo -e "${NC}"
+echo -e "${BLUE}
+====================================================
+  _____       _               _            
+ |  __ \     | |             | |           
+ | |  \/ ___ | |__  _   _ ___| |_ ___ _ __ 
+ | | __ / _ \| '_ \| | | / __| __/ _ \ '__|
+ | |_\ \ (_) | |_) | |_| \__ \ ||  __/ |   
+  \____/\___/|_.__/ \__,_|___/\__\___|_|   
+====================================================
+${NC}"
 
-if [[ -n "$GOBUSTER_BIN" && ${#HTTPX_MAP[@]} -gt 0 && ${#WORDLISTS[@]} -gt 0 ]]; then
-    for WL in "${WORDLISTS[@]}"; do
-        echo -e "${YELLOW}[*] Using wordlist: $WL${NC}"
-        for url in "${!HTTPX_MAP[@]}"; do
-            TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | sed 's/[:\/]/_/g')"
+declare -A GOBUSTER_RESULTS
+for url in "${HTTPX_OUTPUT[@]}"; do
+    for wordlist in "${WORDLISTS[@]}"; do
+        TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | sed 's/[:\/]/_/g')_$(basename "$wordlist")"
+        "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -q -o "$TMP_GOB" 2>/dev/null || continue
+        if [[ -s "$TMP_GOB" ]]; then
+            GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
             TMP_FILES+=("$TMP_GOB")
-            # silent (-q) will suppress progress; output to file
-            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -x php,html -t 50 -o "$TMP_GOB" -q 2>/dev/null || true
-            if [[ -s "$TMP_GOB" ]]; then
-                GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
-            fi
-        done
+        fi
     done
-else
-    echo -e "${YELLOW}[*] Gobuster skipped (missing tool, no live URLs, or no wordlists).${NC}"
-fi
+done
 
 # ====================
 # Nuclei Phase
 # ====================
-echo -e "${RED}"
-echo "===================================================="
-echo "                     .__         .__ "
-echo "  ____  __ __   ____ |  |   ____ |__|"
-echo " /    \|  |  \_/ ___\|  | _/ __ \|  |"
-echo "|   |  \  |  /\  \___|  |_\  ___/|  |"
-echo "|___|  /____/  \___  >____/\___  >__|"
-echo "     \/            \/          \/    "
-echo "===================================================="
-echo -e "${NC}"
+echo -e "${BLUE}
+====================================================
+                     .__         .__ 
+  ____  __ __   ____ |  |   ____ |__|
+ /    \|  |  \_/ ___\|  | _/ __ \|  |
+|   |  \  |  /\  \___|  |_\  ___/|  |
+|___|  /____/  \___  >____/\___  >__|
+     \/            \/          \/    
+====================================================
+${NC}"
 
-if [[ -n "$NUCLEI_BIN" && ${#HTTPX_MAP[@]} -gt 0 ]]; then
-    for url in "${!HTTPX_MAP[@]}"; do
-        TMP_NUC="$TMP_DIR/nuclei_$(echo "$url" | sed 's/[:\/]/_/g')"
-        TMP_FILES+=("$TMP_NUC")
-        "$NUCLEI_BIN" -u "$url" -silent -o "$TMP_NUC" 2>/dev/null || {
-            echo -e "${YELLOW}[!] Nuclei scan had issues for $url${NC}"
-        }
-        if [[ -s "$TMP_NUC" ]]; then
-            NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
-        fi
-    done
-else
-    echo -e "${BLUE}[*] Nuclei skipped (missing tool or no live URLs).${NC}"
-fi
+declare -A NUCLEI_RESULTS
+for url in "${HTTPX_OUTPUT[@]}"; do
+    TMP_NUC="$TMP_DIR/nuclei_$(echo "$url" | sed 's/[:\/]/_/g')"
+    TMP_FILES+=("$TMP_NUC")
+    "$NUCLEI_BIN" -u "$url" -silent -o "$TMP_NUC" 2>/dev/null || {
+        echo -e "${YELLOW}[!] Nuclei scan had issues for $url${NC}"
+    }
+    if [[ -s "$TMP_NUC" ]]; then
+        NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
+    fi
+done
+
 
 # ====================
 # Summary
