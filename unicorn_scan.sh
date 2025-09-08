@@ -218,7 +218,7 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase (dynamic ports) — FIXED
+# HTTPX Phase (dynamic ports) — PARROT/Bash 4 SAFE
 # ====================
 echo -e "${BLUE}
 ====================================================
@@ -230,7 +230,7 @@ echo -e "${BLUE}
              /_/                      
 ====================================================${NC}"
 
-# Ensure HTTPX_MAP is initialized (set -u safe)
+# Initialize HTTPX_MAP
 HTTPX_MAP=()
 
 if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
@@ -270,8 +270,8 @@ if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
             done < "$TMP_HTTP_OUT"
         fi
 
-        # Fallback: keep original URLs if httpx output empty
-        if [[ ${#HTTPX_MAP[@]:-0} -eq 0 ]]; then
+        # Fallback if httpx returned nothing
+        if [[ ${#HTTPX_MAP[@]} -eq 0 ]]; then
             echo -e "${YELLOW}[!] httpx returned nothing, falling back to candidate URLs.${NC}"
             while IFS= read -r url; do
                 [[ -n "$url" ]] && HTTPX_MAP["$url"]="Fallback"
@@ -279,7 +279,7 @@ if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
         fi
 
         echo -e "${GREEN}[*] HTTP URLs to scan:${NC}"
-        for url in "${!HTTPX_MAP[@]:-}"; do
+        for url in "${!HTTPX_MAP[@]}"; do
             echo "$url -> ${HTTPX_MAP[$url]}"
         done
     fi
