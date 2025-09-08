@@ -313,9 +313,11 @@ print_gobuster_banner() {
 EOF
     printf '%b\n' "$NC"
 
-    print_gobuster_banner
 
 }
+
+    print_gobuster_banner
+
 # Check prerequisites
 if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
     echo -e "${RED}[!] Gobuster binary not found. Skipping Gobuster phase.${NC}"
