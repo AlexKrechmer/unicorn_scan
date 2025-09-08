@@ -218,28 +218,48 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase
+# HTTPX Phase (dynamic ports)
 # ====================
-echo -e "${BLUE}"
-echo "===================================================="
-echo "    __    __  __                      "
-echo "   / /_  / /_/ /_____  _  __          "
-echo "  / __ \/ __/ __/ __ \| |/_/          "
-echo " / / / / /_/ /_/ /_/ />  <            "
-echo "/_/ /_/\__/\__/ .___/_/|_|            "
-echo "             /_/                      "
-echo "===================================================="
-echo -e "${NC}"
+echo -e "${BLUE}
+====================================================
+    __    __  __                      
+   / /_  / /_/ /_____  _  __          
+  / __ \/ __/ __/ __ \| |/_/          
+ / / / / /_/ /_/ /_/ />  <            
+/_/ /_/\__/\__/ .___/_/|_|            
+             /_/                      
+====================================================${NC}"
 
-if [[ -n "$HTTPX_BIN" && -n "$HTTP_URLS" ]]; then
+if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
     TMP_HTTP="$TMP_DIR/httpx.in"
     TMP_HTTP_OUT="$TMP_DIR/httpx.out"
     TMP_FILES+=("$TMP_HTTP" "$TMP_HTTP_OUT")
-    echo "$HTTP_URLS" > "$TMP_HTTP"
-    echo -e "${BLUE}[*] Running httpx on generated URLs...${NC}"
-    # httpx output often begins with URL; we capture full line and split on first space
-    "$HTTPX_BIN" -list "$TMP_HTTP" -threads 50 -timeout 10 -status-code -follow-redirects -ports 80,443,8080,8443,8000,5000,3000 -title -vhost -no-color -silent > "$TMP_HTTP_OUT" 2>/dev/null || true
 
+    # generate URLs for all discovered ports
+    HTTP_URLS=""
+    for p in ${PORTS//,/ }; do
+        proto="http"
+        # treat common HTTPS ports as https
+        if [[ "$p" =~ ^(443|8443|7443|9443)$ ]]; then
+            proto="https"
+        fi
+        # append :port if non-default
+        if { [[ "$proto" == "http" && "$p" != "80" ]] || [[ "$proto" == "https" && "$p" != "443" ]]; }; then
+            url="$proto://$TARGET:$p"
+        else
+            url="$proto://$TARGET"
+        fi
+        HTTP_URLS+="$url"$'\n'
+    done
+
+    echo "$HTTP_URLS" > "$TMP_HTTP"
+    echo -e "${BLUE}[*] Running httpx on all discovered ports...${NC}"
+
+    # dynamically scan all discovered ports
+    "$HTTPX_BIN" -list "$TMP_HTTP" -threads 50 -timeout 10 \
+        -status-code -follow-redirects -title -vhost -no-color > "$TMP_HTTP_OUT" 2>/dev/null || true
+
+    # populate associative array
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         url=$(echo "$line" | awk '{print $1}')
@@ -247,17 +267,23 @@ if [[ -n "$HTTPX_BIN" && -n "$HTTP_URLS" ]]; then
         HTTPX_MAP["$url"]="$meta"
     done < "$TMP_HTTP_OUT"
 
-    if [[ ${#HTTPX_MAP[@]} -gt 0 ]]; then
-        echo -e "${GREEN}[*] Live HTTP URLs discovered:${NC}"
-        for u in "${!HTTPX_MAP[@]}"; do
-            echo "$u -> ${HTTPX_MAP[$u]}"
-        done
-    else
-        echo -e "${YELLOW}[!] No responsive HTTP URLs found.${NC}"
+    # fallback if no HTTP responses detected
+    if [[ ${#HTTPX_MAP[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}[!] No responsive HTTP URLs detected — using fallback URLs for Gobuster/Nuclei.${NC}"
+        while IFS= read -r url; do
+            HTTPX_MAP["$url"]="Fallback URL"
+        done < "$TMP_HTTP"
     fi
+
+    # print live URLs
+    echo -e "${GREEN}[*] HTTP URLs to scan:${NC}"
+    for u in "${!HTTPX_MAP[@]}"; do
+        echo "$u -> ${HTTPX_MAP[$u]}"
+    done
 else
-    echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
+    echo -e "${RED}[!] httpx not found or no ports discovered.${NC}"
 fi
+
 
 # ====================
 # Gobuster Phase
