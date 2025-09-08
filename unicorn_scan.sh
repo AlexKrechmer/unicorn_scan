@@ -150,7 +150,7 @@ TMP_FILES+=("$TMP_DIR")
 # ====================
 # Naabu Phase
 # ====================
-printf '%b' "$TEAL"
+printf '%b' "$BLUE"
 cat <<'EOF'
 ====================================================
                   __       
@@ -181,8 +181,8 @@ fi
 # ====================
 # Nmap Phase
 # ====================
-echo -e "${YELLOW}"
-cat <<EOF
+printf '%b' "$YELLOW"
+cat <<'EOF'
 ====================================================
  .-----.--------.---.-.-----.
  |     |        |  _  |  _  |
@@ -190,7 +190,7 @@ cat <<EOF
                       |__|   
 ====================================================
 EOF
-echo -e "${NC}"
+printf '%b\n' "$NC"
 if [[ -n "$PORTS" && -n "$NMAP_BIN" ]]; then
     NMAP_TMP="$TMP_DIR/nmap.out"
     TMP_FILES+=("$NMAP_TMP")
@@ -228,8 +228,8 @@ fi
 # HTTPX Phase
 # ====================
 print_httpx_banner() {
-printf '%b' "$GREEN"
-cat <<'EOF'
+    printf '%b' "$GREEN"
+    cat <<'EOF'
 ====================================================
     __    __  __                      
    / /_  / /_/ /_____  _  __          
@@ -239,7 +239,7 @@ cat <<'EOF'
              /_/                      
 ====================================================
 EOF
-printf '%b\n' "$NC"
+    printf '%b\n' "$NC"
 }
 
 # Call the banner
