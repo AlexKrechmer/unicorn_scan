@@ -225,7 +225,7 @@ echo -e "${BLUE}
     __    __  __                      
    / /_  / /_/ /_____  _  __          
   / __ \/ __/ __/ __ \| |/_/          
- / / / /_/ /_/ /_/ />  <            
+ / / / /_/ /_/ /_/ /   >  <            
 /_/ /_/\__/\__/ .___/_/|_|            
              /_/                      
 ====================================================
@@ -233,45 +233,52 @@ ${NC}"
 
 # Declare associative arrays
 declare -A HTTPX_MAP
-declare -a HTTPX_OUTPUT
+declare -a HTTP_URLS
 
-if [[ -n "$PORTS" ]]; then
-    IFS=',' read -r -a PORT_ARRAY <<< "$PORTS"
-
+# Build HTTPX candidate URLs from ports and live hosts
+IFS=',' read -r -a PORT_ARRAY <<< "$PORTS"
+for host in "${LIVE_HOSTS[@]}"; do
     for port in "${PORT_ARRAY[@]}"; do
         for proto in http https; do
             if [[ "$port" -eq 80 && "$proto" == "http" ]] || [[ "$port" -eq 443 && "$proto" == "https" ]]; then
-                url="$proto://$TARGET"
+                url="$proto://$host"
             else
-                url="$proto://$TARGET:$port"
+                url="$proto://$host:$port"
             fi
             HTTPX_MAP["$url"]="$port"
         done
     done
-fi
+done
 
-# Run HTTPX validation
+# Run HTTPX in parallel
 if [[ ${#HTTPX_MAP[@]} -gt 0 && -n "$HTTPX_BIN" ]]; then
     for url in "${!HTTPX_MAP[@]}"; do
-        out=$("$HTTPX_BIN" -silent -timeout 5 -status-code -title -u "$url" 2>/dev/null)
-        if [[ -n "$out" ]]; then
-            HTTPX_OUTPUT+=("$url")
-        fi
+        {
+            echo -e "${GREEN}[HTTPX] Testing $url${NC}"
+            "$HTTPX_BIN" -u "$url" -status-code -title -tech-detect -silent -timeout 5 -threads 10 \
+            | while read -r line; do
+                echo -e "${TEAL}[HTTPX] $line${NC}"
+                HTTP_URLS+=("$line")
+            done
+        } &
     done
+    wait
 
-    if [[ ${#HTTPX_OUTPUT[@]} -eq 0 ]]; then
+    # Fallback if HTTPX returns nothing
+    if [[ ${#HTTP_URLS[@]} -eq 0 ]]; then
         echo -e "${YELLOW}[!] HTTPX found nothing, using fallback URLs${NC}"
-        HTTPX_OUTPUT=("${!HTTPX_MAP[@]}")
+        HTTP_URLS=("${!HTTPX_MAP[@]}")
     fi
 else
     echo -e "${RED}[!] No candidate HTTP URLs or httpx missing${NC}"
     exit 1
 fi
 
+
 # ====================
 # Gobuster Phase
 # ====================
-echo -e "${BLUE}
+echo -e "${PURPLE}
 ====================================================
   _____       _               _            
  |  __ \     | |             | |           
@@ -283,21 +290,37 @@ echo -e "${BLUE}
 ${NC}"
 
 declare -A GOBUSTER_RESULTS
-if [[ -n "$GOBUSTER_BIN" ]]; then
+
+# Check prerequisites
+if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
+    echo -e "${RED}[!] Gobuster binary not found. Skipping Gobuster phase.${NC}"
+elif [[ ${#HTTPX_OUTPUT[@]} -eq 0 || ${#WORDLISTS[@]} -eq 0 ]]; then
+    echo -e "${YELLOW}[!] Gobuster skipped: No URLs or wordlists provided.${NC}"
+else
+    echo -e "${PURPLE}[+] Starting Gobuster scans...${NC}"
+    
     for url in "${HTTPX_OUTPUT[@]}"; do
         for wordlist in "${WORDLISTS[@]}"; do
-            TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | sed 's/[:\/]/_/g')_$(basename "$wordlist")"
-            "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -q -o "$TMP_GOB" 2>/dev/null || continue
-            if [[ -s "$TMP_GOB" ]]; then
-                GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
-                TMP_FILES+=("$TMP_GOB")
-            fi
+            {
+                echo -e "${TEAL}[Gobuster] Scanning $url with $(basename "$wordlist")${NC}"
+                
+                TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | sed 's/[:\/]/_/g')_$(basename "$wordlist")"
+                
+                "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q 2>/dev/null \
+                | while read -r line; do
+                    echo -e "${TEAL}[Gobuster] $line${NC}"
+                    GOBUSTER_RESULTS["$url"]+="$line"$'\n'
+                done
+                
+                # Save temporary results for later use
+                if [[ -s "$TMP_GOB" ]]; then
+                    TMP_FILES+=("$TMP_GOB")
+                fi
+            } &
         done
     done
-else
-    echo -e "${RED}[!] Gobuster not found, skipping.${NC}"
-fi
-
+    wait
+    echo -e "${PURPLE}[+] Gobuster phase completed.${NC}"
 # ====================
 # Nuclei Phase
 # ====================
@@ -312,22 +335,45 @@ echo -e "${BLUE}
 ====================================================
 ${NC}"
 
+echo -e "${ORANGE}==================== Nuclei Phase ====================${NC}"
+
 declare -A NUCLEI_RESULTS
-if [[ -n "$NUCLEI_BIN" ]]; then
-    for url in "${HTTPX_OUTPUT[@]}"; do
-        TMP_NUC="$TMP_DIR/nuclei_$(echo "$url" | sed 's/[:\/]/_/g')"
-        TMP_FILES+=("$TMP_NUC")
-        "$NUCLEI_BIN" -u "$url" -silent -o "$TMP_NUC" 2>/dev/null || {
-            echo -e "${YELLOW}[!] Nuclei scan had issues for $url${NC}"
-        }
-        if [[ -s "$TMP_NUC" ]]; then
-            NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
-        fi
+
+# Make sure we have URLs and nuclei binary
+if [[ ${#HTTP_URLS[@]} -gt 0 && command -v "$NUCLEI_BIN" &>/dev/null ]]; then
+
+    for url in "${HTTP_URLS[@]}"; do
+        {
+            echo -e "${ORANGE}[Nuclei] Scanning $url${NC}"
+
+            TMP_NUC="$TMP_DIR/nuclei_$(echo "$url" | sed 's/[:\/]/_/g')"
+            TMP_FILES+=("$TMP_NUC")
+
+            # Run nuclei with optional template list
+            if [[ ${#NUCLEI_TEMPLATES[@]} -gt 0 ]]; then
+                "$NUCLEI_BIN" -u "$url" $(printf -- "-t %s " "${NUCLEI_TEMPLATES[@]}") -silent \
+                | while read -r line; do
+                    echo -e "${GREEN}[Nuclei] $line${NC}"
+                    NUCLEI_RESULTS["$url"]+="$line"$'\n'
+                done > "$TMP_NUC" 2>/dev/null
+            else
+                "$NUCLEI_BIN" -u "$url" -silent > "$TMP_NUC" 2>/dev/null || {
+                    echo -e "${YELLOW}[!] Nuclei scan had issues for $url${NC}"
+                }
+                if [[ -s "$TMP_NUC" ]]; then
+                    NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
+                fi
+            fi
+        } &
     done
+
+    # Wait for all background scans to finish
+    wait
 else
-    echo -e "${RED}[!] Nuclei not found, skipping.${NC}"
+    echo -e "${YELLOW}[!] Nuclei skipped: missing URLs or binary.${NC}"
 fi
 
+echo -e "${YELLOW}[!] HTTPX → Gobuster → Nuclei processing complete.${NC}"
 
 # ====================
 # Summary
