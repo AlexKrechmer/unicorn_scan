@@ -1,8 +1,6 @@
-#!/bin/bash
-# unicorn_scan.sh - Full-featured Automated Recon Script
-# By Alex 🦄
-# Usage: sudo ./unicorn_scan.sh <target>
-
+#!/usr/bin/env bash
+# unicorn_scan.sh - Full-featured Automated Recon Script (cleaned)
+# By Alex 🦄  — revised
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -19,11 +17,13 @@ TEAL="\033[1;36m"
 ORANGE="\033[1;33m"
 
 # ====================
-# Associative arrays
+# Globals & arrays
 # ====================
 declare -A HTTPX_MAP
 declare -A GOBUSTER_RESULTS
 declare -A NUCLEI_RESULTS
+TMP_FILES=()
+TMP_DIR=""
 
 # ====================
 # Script directory
@@ -31,14 +31,39 @@ declare -A NUCLEI_RESULTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ====================
-# Tool finder
+# Cleanup (single trap)
+# ====================
+cleanup() {
+    local rc=$?
+    if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+        rm -rf "$TMP_DIR" || true
+    fi
+    for f in "${TMP_FILES[@]:-}"; do
+        [[ -e "$f" ]] && rm -f "$f" || true
+    done
+    exit $rc
+}
+trap cleanup EXIT
+
+# ====================
+# Tool finder (search common locations / PATH)
 # ====================
 find_tool() {
     local tool=$1
-    for path in "$SCRIPT_DIR/bin/$tool" "$HOME/go/bin/$tool" "/usr/local/bin/$tool" "/usr/bin/$tool"; do
-        [ -x "$path" ] && echo "$path" && return
+    local candidates=(
+        "$SCRIPT_DIR/bin/$tool"
+        "$HOME/go/bin/$tool"
+        "/usr/local/bin/$tool"
+        "/usr/bin/$tool"
+        "/bin/$tool"
+    )
+    for p in "${candidates[@]}"; do
+        [[ -x "$p" ]] && { echo "$p"; return 0; }
     done
-    command -v "$tool" >/dev/null 2>&1 && command -v "$tool" && return
+    if command -v "$tool" >/dev/null 2>&1; then
+        command -v "$tool"
+        return 0
+    fi
     echo ""
 }
 
@@ -47,12 +72,16 @@ NMAP_BIN=$(find_tool nmap)
 HTTPX_BIN=$(find_tool httpx)
 GOBUSTER_BIN=$(find_tool gobuster)
 NUCLEI_BIN=$(find_tool nuclei)
+GIT_BIN=$(find_tool git)
 
 # ====================
 # Target
 # ====================
 TARGET="${1:-}"
-[ -z "$TARGET" ] && { echo -e "${RED}[!] Usage: $0 <target>${NC}"; exit 1; }
+if [[ -z "$TARGET" ]]; then
+    echo -e "${RED}[!] Usage: $0 <target>${NC}"
+    exit 1
+fi
 
 # ====================
 # Wordlists
@@ -66,18 +95,33 @@ MEDIUM_WL="$WORDLIST_DIR/raft-medium-directories.txt"
 COMMON_WL="$WORDLIST_DIR/common.txt"
 
 if [[ ! -f "$SMALL_WL" || ! -f "$QUICKHIT_WL" || ! -f "$MEDIUM_WL" || ! -f "$COMMON_WL" ]]; then
-    echo -e "${YELLOW}[*] Wordlists missing, cloning SecLists...${NC}"
-    git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$SCRIPT_DIR/tmp_sec"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-small-directories.txt" "$SMALL_WL"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/raft-medium-directories.txt" "$MEDIUM_WL"
-    cp "$SCRIPT_DIR/tmp_sec/Discovery/Web-Content/common.txt" "$COMMON_WL"
-    rm -rf "$SCRIPT_DIR/tmp_sec"
+    if [[ -n "$GIT_BIN" ]]; then
+        echo -e "${YELLOW}[*] Wordlists missing, cloning SecLists...${NC}"
+        TMP_DIR=$(mktemp -d)
+        TMP_FILES+=("$TMP_DIR")
+        git clone --depth 1 https://github.com/danielmiessler/SecLists.git "$TMP_DIR/tmp_sec" >/dev/null 2>&1 || {
+            echo -e "${RED}[!] Failed to clone SecLists. Check network/git.${NC}"
+        }
+        if [[ -d "$TMP_DIR/tmp_sec" ]]; then
+            cp -f "$TMP_DIR/tmp_sec/Discovery/Web-Content/raft-small-directories.txt" "$SMALL_WL" 2>/dev/null || true
+            cp -f "$TMP_DIR/tmp_sec/Discovery/Web-Content/quickhits.txt" "$QUICKHIT_WL" 2>/dev/null || true
+            cp -f "$TMP_DIR/tmp_sec/Discovery/Web-Content/raft-medium-directories.txt" "$MEDIUM_WL" 2>/dev/null || true
+            cp -f "$TMP_DIR/tmp_sec/Discovery/Web-Content/common.txt" "$COMMON_WL" 2>/dev/null || true
+            rm -rf "$TMP_DIR/tmp_sec"
+        else
+            echo -e "${YELLOW}[!] SecLists not available — continuing without cloning.${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[!] git not found and wordlists missing — continuing.${NC}"
+    fi
 else
     echo -e "${GREEN}[*] Wordlists already present.${NC}"
 fi
 
-WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL")
+WORDLISTS=()
+for wl in "$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL"; do
+    [[ -f "$wl" ]] && WORDLISTS+=("$wl")
+done
 
 # ====================
 # ASCII Banner
@@ -95,6 +139,10 @@ print_banner() {
 print_banner
 echo -e "${GREEN}[*] Starting Unicorn Scan on $TARGET${NC}"
 
+# Create a dedicated temp dir for per-run files
+TMP_DIR="${TMP_DIR:-$(mktemp -d)}"
+TMP_FILES+=("$TMP_DIR")
+
 # ====================
 # Naabu Phase
 # ====================
@@ -108,10 +156,18 @@ echo "===================================================="
 echo -e "${NC}"
 
 PORTS=""
-if [ -n "$NAABU_BIN" ]; then
+if [[ -n "$NAABU_BIN" ]]; then
     echo -e "${BLUE}[*] Running Naabu to discover open ports...${NC}"
-    PORTS=$($NAABU_BIN -host "$TARGET" -silent 2>/dev/null | awk -F: '{print $2?$2:$1}' | sort -nu | tr '\n' ',' | sed 's/,$//')
-    [ -n "$PORTS" ] && echo -e "${GREEN}[*] Discovered ports: $PORTS${NC}"
+    # using -silent for compact output; expect lines like host:port
+    NAABU_OUT="$TMP_DIR/naabu.out"
+    TMP_FILES+=("$NAABU_OUT")
+    "$NAABU_BIN" -host "$TARGET" -silent 2>/dev/null | awk -F: '{print $2?$2:$1}' | sort -n -u > "$NAABU_OUT" || true
+    if [[ -s "$NAABU_OUT" ]]; then
+        PORTS=$(paste -sd, "$NAABU_OUT")
+        echo -e "${GREEN}[*] Discovered ports: $PORTS${NC}"
+    else
+        echo -e "${YELLOW}[!] Naabu found no ports or failed.${NC}"
+    fi
 else
     echo -e "${RED}[!] Naabu not found, skipping port discovery.${NC}"
 fi
@@ -128,26 +184,37 @@ echo "                      |__|   "
 echo "===================================================="
 echo -e "${NC}"
 
-NMAP_TMP=$(mktemp)
-trap 'rm -f "$NMAP_TMP"' EXIT
-if [ -n "$PORTS" ] && [ -n "$NMAP_BIN" ]; then
+if [[ -n "$PORTS" && -n "$NMAP_BIN" ]]; then
+    NMAP_TMP="$TMP_DIR/nmap.out"
+    TMP_FILES+=("$NMAP_TMP")
     echo -e "${ORANGE}[*] Running Nmap on discovered ports...${NC}"
-    $NMAP_BIN -p "$PORTS" -sV "$TARGET" | tee /dev/tty > "$NMAP_TMP"
+    # -Pn omitted so hosts that block ping can still be checked if you want add -Pn
+    "$NMAP_BIN" -p "$PORTS" -sV "$TARGET" | tee "$NMAP_TMP"
 else
-    echo -e "${RED}[!] No ports found or Nmap missing, skipping.${NC}"
+    if [[ -z "$PORTS" ]]; then
+        echo -e "${YELLOW}[!] No ports discovered; skipping targeted Nmap scan.${NC}"
+    else
+        echo -e "${RED}[!] Nmap missing, skipping Nmap phase.${NC}"
+    fi
 fi
 
 # Generate HTTP URLs from discovered ports
 HTTP_URLS=""
-if [ -n "$PORTS" ]; then
-    for p in $(echo "$PORTS" | tr ',' ' '); do
+if [[ -n "$PORTS" ]]; then
+    for p in ${PORTS//,/ }; do
         proto="http"
-        url="$TARGET"
-        [[ "$p" == "443" || "$p" == "8443" ]] && proto="https"
-        [[ "$p" != "80" && "$p" != "443" ]] && url="$TARGET:$p"
-        HTTP_URLS+="$proto://$url"$'\n'
+        host="$TARGET"
+        # Treat common TLS ports as https
+        if [[ "$p" == "443" || "$p" == "8443" || "$p" == "7443" ]]; then
+            proto="https"
+        fi
+        # only append :port if not default for proto
+        if { [[ "$proto" == "http" && "$p" != "80" ]] || [[ "$proto" == "https" && "$p" != "443" ]]; }; then
+            host="$TARGET:$p"
+        fi
+        HTTP_URLS+="$proto://$host"$'\n'
     done
-    HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d')
+    HTTP_URLS=$(echo "$HTTP_URLS" | sed '/^\s*$/d' | sort -u)
 fi
 
 # ====================
@@ -164,30 +231,21 @@ echo "             /_/                      "
 echo "===================================================="
 echo -e "${NC}"
 
-declare -A HTTPX_MAP
 if [[ -n "$HTTPX_BIN" && -n "$HTTP_URLS" ]]; then
-    TMP_HTTP=$(mktemp)
+    TMP_HTTP="$TMP_DIR/httpx.in"
+    TMP_HTTP_OUT="$TMP_DIR/httpx.out"
+    TMP_FILES+=("$TMP_HTTP" "$TMP_HTTP_OUT")
     echo "$HTTP_URLS" > "$TMP_HTTP"
-    trap 'rm -f "$TMP_HTTP"' EXIT
-
-    HTTPX_RESULTS=$(
-        $HTTPX_BIN -list "$TMP_HTTP" \
-            -threads 50 \
-            -timeout 10 \
-            -status-code \
-            -follow-redirects \
-            -ports 80,443,8080,8443,8000,5000,3000 \
-            -title \
-            -vhost \
-            -no-color
-    )
+    echo -e "${BLUE}[*] Running httpx on generated URLs...${NC}"
+    # httpx output often begins with URL; we capture full line and split on first space
+    "$HTTPX_BIN" -list "$TMP_HTTP" -threads 50 -timeout 10 -status-code -follow-redirects -ports 80,443,8080,8443,8000,5000,3000 -title -vhost -no-color -silent > "$TMP_HTTP_OUT" 2>/dev/null || true
 
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         url=$(echo "$line" | awk '{print $1}')
         meta=$(echo "$line" | cut -d' ' -f2-)
         HTTPX_MAP["$url"]="$meta"
-    done <<< "$HTTPX_RESULTS"
+    done < "$TMP_HTTP_OUT"
 
     if [[ ${#HTTPX_MAP[@]} -gt 0 ]]; then
         echo -e "${GREEN}[*] Live HTTP URLs discovered:${NC}"
@@ -200,6 +258,7 @@ if [[ -n "$HTTPX_BIN" && -n "$HTTP_URLS" ]]; then
 else
     echo -e "${RED}[!] httpx not found or no URLs to scan.${NC}"
 fi
+
 # ====================
 # Gobuster Phase
 # ====================
@@ -214,19 +273,21 @@ echo "  \____/\___/|_.__/ \__,_|___/\__\___|_|   "
 echo "===================================================="
 echo -e "${NC}"
 
-declare -A GOBUSTER_RESULTS
-if [[ -n "$GOBUSTER_BIN" && ${#HTTPX_MAP[@]} -gt 0 ]]; then
+if [[ -n "$GOBUSTER_BIN" && ${#HTTPX_MAP[@]} -gt 0 && ${#WORDLISTS[@]} -gt 0 ]]; then
     for WL in "${WORDLISTS[@]}"; do
         echo -e "${YELLOW}[*] Using wordlist: $WL${NC}"
         for url in "${!HTTPX_MAP[@]}"; do
-            TMP_GOB=$(mktemp)
-            $GOBUSTER_BIN dir -u "$url" -w "$WL" -x php,html -t 50 -o "$TMP_GOB" -q
-            [[ -s "$TMP_GOB" ]] && GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
-            rm -f "$TMP_GOB"
+            TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | sed 's/[:\/]/_/g')"
+            TMP_FILES+=("$TMP_GOB")
+            # silent (-q) will suppress progress; output to file
+            "$GOBUSTER_BIN" dir -u "$url" -w "$WL" -x php,html -t 50 -o "$TMP_GOB" -q 2>/dev/null || true
+            if [[ -s "$TMP_GOB" ]]; then
+                GOBUSTER_RESULTS["$url"]+=$(cat "$TMP_GOB")$'\n'
+            fi
         done
     done
 else
-    echo -e "${YELLOW}[*] Gobuster skipped (missing tool or no live URLs).${NC}"
+    echo -e "${YELLOW}[*] Gobuster skipped (missing tool, no live URLs, or no wordlists).${NC}"
 fi
 
 # ====================
@@ -243,13 +304,16 @@ echo "     \/            \/          \/    "
 echo "===================================================="
 echo -e "${NC}"
 
-declare -A NUCLEI_RESULTS
 if [[ -n "$NUCLEI_BIN" && ${#HTTPX_MAP[@]} -gt 0 ]]; then
     for url in "${!HTTPX_MAP[@]}"; do
-        TMP_NUC=$(mktemp)
-        $NUCLEI_BIN -u "$url" -silent -o "$TMP_NUC" || echo "[!] Nuclei scan failed for $url"
-        [[ -s "$TMP_NUC" ]] && NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
-        rm -f "$TMP_NUC"
+        TMP_NUC="$TMP_DIR/nuclei_$(echo "$url" | sed 's/[:\/]/_/g')"
+        TMP_FILES+=("$TMP_NUC")
+        "$NUCLEI_BIN" -u "$url" -silent -o "$TMP_NUC" 2>/dev/null || {
+            echo -e "${YELLOW}[!] Nuclei scan had issues for $url${NC}"
+        }
+        if [[ -s "$TMP_NUC" ]]; then
+            NUCLEI_RESULTS["$url"]="$(cat "$TMP_NUC")"
+        fi
     done
 else
     echo -e "${BLUE}[*] Nuclei skipped (missing tool or no live URLs).${NC}"
@@ -296,7 +360,7 @@ else
 fi
 
 echo -e "
-Wordlists Used: ${WORDLISTS[*]}
+Wordlists Used: ${WORDLISTS[*]:-None}
 ====================================================
 [*] Unicorn Scan finished!
 ${NC}"
