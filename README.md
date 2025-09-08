@@ -70,7 +70,7 @@ go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 
 ls bin/
 
-# Should show 'naabu'. gobster and 'httpx'
+# Should show 'naabu'. gobster, nuclei, and 'httpx'
 
 5️⃣ Make Script Executable
 
