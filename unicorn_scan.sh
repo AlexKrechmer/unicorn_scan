@@ -127,8 +127,11 @@ done
 # ASCII Banner
 # ====================
 print_banner() {
-printf '%b' "$TEAL"
-cat <<'EOF'
+    # Set color
+    printf '%b' "$TEAL"
+
+    # Print ASCII banner literally
+    cat <<'EOF'
              _                                              
  /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ 
 / / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _` | '_ \
@@ -136,9 +139,13 @@ cat <<'EOF'
  \___/|_| |_|_|\___\___/|_|  |_| |_|___|___/\___\__,_|_| |_|
                                   |_____|                  
 EOF
-printf '%b\n' "$NC"
 
+    # Reset color
+    printf '%b\n' "$NC"
 }
+
+# Call it
+print_banner
 
 print_banner
 echo -e "${GREEN}[*] Starting Unicorn Scan on $TARGET${NC}"
@@ -150,8 +157,9 @@ TMP_FILES+=("$TMP_DIR")
 # ====================
 # Naabu Phase
 # ====================
-printf '%b' "$BLUE"
-cat <<'EOF'
+print_blue_banner() {
+    printf '%b' "$BLUE"
+    cat <<'EOF'
 ====================================================
                   __       
   ___  ___ ____ _/ /  __ __
@@ -159,7 +167,10 @@ cat <<'EOF'
 /_//_/\_,_/\_,_/_.__/\_,_/ 
 ====================================================
 EOF
-printf '%b\n' "$NC"
+    printf '%b\n' "$NC"
+}
+
+print_blue_banner
 
 PORTS=""
 if [[ -n "$NAABU_BIN" ]]; then
@@ -181,8 +192,9 @@ fi
 # ====================
 # Nmap Phase
 # ====================
-printf '%b' "$YELLOW"
-cat <<'EOF'
+print_yellow_banner() {
+    printf '%b' "$YELLOW"
+    cat <<'EOF'
 ====================================================
  .-----.--------.---.-.-----.
  |     |        |  _  |  _  |
@@ -190,7 +202,10 @@ cat <<'EOF'
                       |__|   
 ====================================================
 EOF
-printf '%b\n' "$NC"
+    printf '%b\n' "$NC"
+}
+
+print_yellow_banner
 if [[ -n "$PORTS" && -n "$NMAP_BIN" ]]; then
     NMAP_TMP="$TMP_DIR/nmap.out"
     TMP_FILES+=("$NMAP_TMP")
@@ -240,6 +255,9 @@ print_httpx_banner() {
 ====================================================
 EOF
     printf '%b\n' "$NC"
+    
+    print_httpx_banner
+
 }
 
 # Call the banner
@@ -284,8 +302,9 @@ wait
 # ====================
 # Gobuster Phase
 # ====================
-printf '%b' "$ORANGE"
-cat <<'EOF'
+print_gobuster_banner() {
+    printf '%b' "$ORANGE"
+    cat <<'EOF'
 ====================================================
   _____       _               _            
  |  __ \     | |             | |           
@@ -295,7 +314,11 @@ cat <<'EOF'
   \____/\___/|_.__/ \__,_|___/\__\___|_|   
 ====================================================
 EOF
-printf '%b\n' "$NC"
+    printf '%b\n' "$NC"
+
+    print_gobuster_banner
+
+}
 # Check prerequisites
 if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
     echo -e "${RED}[!] Gobuster binary not found. Skipping Gobuster phase.${NC}"
@@ -339,8 +362,9 @@ fi
 # ====================
 # Nuclei Phase
 # ====================
-printf '%b' "$RED"
-cat <<'EOF'
+print_nmap_banner() {
+    printf '%b' "$RED"
+    cat <<'EOF'
 ====================================================
                      .__         .__ 
   ____  __ __   ____ |  |   ____ |__|
@@ -350,7 +374,11 @@ cat <<'EOF'
      \/            \/          \/    
 ====================================================
 EOF
-printf '%b\n' "$NC"
+    printf '%b\n' "$NC"
+}
+
+# Call the banner when you want it to display
+print_nmap_banner
 
 echo -e "${ORANGE}==================== Nuclei Phase ====================${NC}"
 
