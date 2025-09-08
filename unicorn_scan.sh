@@ -147,7 +147,6 @@ EOF
 # Call it
 print_banner
 
-print_banner
 echo -e "${GREEN}[*] Starting Unicorn Scan on $TARGET${NC}"
 
 # Create a dedicated temp dir for per-run files
@@ -256,8 +255,6 @@ print_httpx_banner() {
 EOF
     printf '%b\n' "$NC"
     
-    print_httpx_banner
-
 }
 
 # Call the banner
