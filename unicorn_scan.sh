@@ -218,44 +218,31 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase (dynamic ports)
+# HTTPX Phase (dynamic ports) — FIXED
 # ====================
 echo -e "${BLUE}
 ====================================================
     __    __  __                      
    / /_  / /_/ /_____  _  __          
   / __ \/ __/ __/ __ \| |/_/          
- / / / / /_/ /_/ /_/ />  <            
-/_/ /_/\__/\__/ .___/_/|_|            
-             /_/                      
-====================================================${NC}"
-# ====================
-# HTTPX Phase (dynamic ports)
-# ====================
-echo -e "${BLUE}
-====================================================
-    __    __  __                      
-   / /_  / /_/ /_____  _  __          
-  / __ \/ __/ __/ __ \| |/_/          
- / / / / /_/ /_/ /_/ />  <            
+ / / / /_/ /_/ /_/ />  <            
 /_/ /_/\__/\__/ .___/_/|_|            
              /_/                      
 ====================================================${NC}"
 
-# Don't redeclare; already declared globally
-# declare -A HTTPX_MAP
+# Ensure HTTPX_MAP is initialized (set -u safe)
+HTTPX_MAP=()
 
 if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
     TMP_HTTP="$TMP_DIR/httpx.in"
     TMP_HTTP_OUT="$TMP_DIR/httpx.out"
     TMP_FILES+=("$TMP_HTTP" "$TMP_HTTP_OUT")
 
-    echo -e "${BLUE}[*] Generating URLs from discovered ports...${NC}"
+    echo -e "${BLUE}[*] Generating candidate URLs from discovered ports...${NC}"
     > "$TMP_HTTP"
     for port in ${PORTS//,/ }; do
         proto="http"
         [[ "$port" == "443" || "$port" == "8443" || "$port" == "7443" ]] && proto="https"
-
         if { [[ "$proto" == "http" && "$port" != "80" ]] || [[ "$proto" == "https" && "$port" != "443" ]]; }; then
             echo "$proto://$TARGET:$port" >> "$TMP_HTTP"
         else
@@ -273,26 +260,26 @@ if [[ -n "$HTTPX_BIN" && -n "$PORTS" ]]; then
         "$HTTPX_BIN" -list "$TMP_HTTP" -threads 50 -timeout 10 \
             -status-code -follow-redirects -title -vhost -no-color > "$TMP_HTTP_OUT" 2>/dev/null || true
 
-        # Only populate array if output exists
+        # Populate HTTPX_MAP safely
         if [[ -s "$TMP_HTTP_OUT" ]]; then
             while IFS= read -r line; do
                 [[ -z "$line" ]] && continue
                 url=$(echo "$line" | awk '{print $1}')
                 meta=$(echo "$line" | cut -d' ' -f2-)
-                HTTPX_MAP["$url"]="$meta"
+                [[ -n "$url" ]] && HTTPX_MAP["$url"]="$meta"
             done < "$TMP_HTTP_OUT"
         fi
 
-        # Fallback: if nothing detected, keep original URLs
-        if [[ ${#HTTPX_MAP[@]} -eq 0 ]]; then
+        # Fallback: keep original URLs if httpx output empty
+        if [[ ${#HTTPX_MAP[@]:-0} -eq 0 ]]; then
             echo -e "${YELLOW}[!] httpx returned nothing, falling back to candidate URLs.${NC}"
             while IFS= read -r url; do
-                HTTPX_MAP["$url"]="Fallback"
+                [[ -n "$url" ]] && HTTPX_MAP["$url"]="Fallback"
             done < "$TMP_HTTP"
         fi
 
         echo -e "${GREEN}[*] HTTP URLs to scan:${NC}"
-        for url in "${!HTTPX_MAP[@]}"; do
+        for url in "${!HTTPX_MAP[@]:-}"; do
             echo "$url -> ${HTTPX_MAP[$url]}"
         done
     fi
