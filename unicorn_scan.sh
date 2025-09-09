@@ -130,8 +130,8 @@ print_banner() {
     # Set color
     printf '%b' "$TEAL"
 
-    # Print ASCII banner literally
-    cat <<EOF
+    # Print ASCII banner literally (heredoc quoted)
+    cat <<'EOF'
              _                                              
  /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ 
 / / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _` | '_ \
