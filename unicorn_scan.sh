@@ -338,11 +338,11 @@ if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
 elif [[ ${#HTTP_URLS[@]} -eq 0 ]]; then
     echo -e "${YELLOW}[!] Gobuster skipped: No URLs provided.${NC}"
 else
-    # Wordlists should already exist; use them directly
+    # Use provided wordlists
     VALID_WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL")
     echo -e "${PURPLE}[+] Starting Gobuster scans...${NC}"
 
-    # Prepare temp files array and job control
+    # Temp files and job control
     TMP_FILES=()
     MAX_JOBS=5
     JOBS=0
@@ -350,41 +350,34 @@ else
     for url in "${HTTP_URLS[@]}"; do
         [[ -z "$url" ]] && continue
 
-        # Split URL and ports if multiple ports are present
-        URL_BASE=$(echo "$url" | cut -d' ' -f1)
-        PORTS=$(echo "$url" | cut -d' ' -f2-)
+        for wordlist in "${VALID_WORDLISTS[@]}"; do
+            [[ ! -f "$wordlist" ]] && continue
 
-        for port in $PORTS; do
-            FULL_URL="${URL_BASE}:${port}"
+            TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | md5sum | awk '{print $1')}_$(basename "$wordlist")"
+            TMP_FILES+=("$TMP_GOB")
 
-            for wordlist in "${VALID_WORDLISTS[@]}"; do
-                [[ ! -f "$wordlist" ]] && continue
+            {
+                WORDLIST_NAME=$(basename "$wordlist")
+                echo -e "${TEAL}[Gobuster] Scanning $url with $WORDLIST_NAME${NC}"
 
-                TMP_GOB="$TMP_DIR/gobuster_$(echo "$FULL_URL" | md5sum | awk '{print $1}')_$(basename "$wordlist")"
-                TMP_FILES+=("$TMP_GOB")
+                # Run Gobuster; output goes to temp file
+                "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q 2>/dev/null > "$TMP_GOB"
+            } &
 
-                {
-                    WORDLIST_NAME=$(basename "$wordlist")
-                    echo -e "${TEAL}[Gobuster] Scanning $FULL_URL with $WORDLIST_NAME${NC}"
-
-                    # Run Gobuster; output goes to temp file
-                    "$GOBUSTER_BIN" dir -u "$FULL_URL" -w "$wordlist" -t 30 -q 2>/dev/null > "$TMP_GOB"
-                } &
-
-                ((JOBS++))
-                if (( JOBS >= MAX_JOBS )); then
-                    wait
-                    JOBS=0
-                fi
-            done
+            ((JOBS++))
+            if (( JOBS >= MAX_JOBS )); then
+                wait
+                JOBS=0
+            fi
         done
     done
 
-    wait  # Wait for all background Gobuster jobs
+    wait  # Wait for remaining background jobs
 
-    # Process temp files sequentially in main shell
+    # Process temp files sequentially
     for tmp in "${TMP_FILES[@]}"; do
         [[ ! -f "$tmp" ]] && continue
+
         FILE_BASENAME=$(basename "$tmp")
         URL_HASH=$(echo "$FILE_BASENAME" | cut -d'_' -f2)
         WORDLIST_NAME=$(echo "$FILE_BASENAME" | rev | cut -d'_' -f1 | rev)
@@ -397,6 +390,8 @@ else
 
     echo -e "${PURPLE}[+] Gobuster phase completed.${NC}"
 fi
+
+
 # ====================
 # Nuclei Phase
 # ====================
