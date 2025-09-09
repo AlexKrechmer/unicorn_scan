@@ -245,15 +245,14 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase (safe: write to temp, then process in main shell)
+# HTTPX Phase (robust)
 # ====================
 print_httpx_banner() {
-    # Status lines in color
     printf '%b\n' "${GREEN}====================================================${NC}"
     printf '%b\n' "${GREEN}[*] HTTPX Phase${NC}"
     printf '%b\n' "${GREEN}====================================================${NC}"
 
-    # ASCII art without color codes for reliability
+    # ASCII art without colors inside heredoc
     cat <<'EOF'
     __    __  __                      
    / /_  / /_/ /_____  _  __          
@@ -267,7 +266,21 @@ EOF
 }
 print_httpx_banner
 
-# Prepare temp files for HTTPX jobs
+# Ensure TMP_DIR exists
+mkdir -p "$TMP_DIR"
+
+# Safe HTTPX wrapper
+run_httpx() {
+    local url="$1"
+    local tmp="$2"
+
+    if ! "$HTTPX_BIN" -silent -title -status-code -u "$url" > "$tmp" 2>&1; then
+        echo -e "${YELLOW}[!] HTTPX failed for $url${NC}" >&2
+        return 1
+    fi
+}
+
+# Prepare temp files and jobs
 declare -a HTTPX_TMP_FILES=()
 if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_BIN" &>/dev/null; then
     printf '%b\n' "${GREEN}[*] Running HTTPX on discovered URLs...${NC}"
@@ -279,10 +292,8 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
         TMP_HTTP="$TMP_DIR/httpx_$(printf '%s' "$url" | md5sum | cut -d' ' -f1)"
         HTTPX_TMP_FILES+=("$TMP_HTTP")
         TMP_FILES+=("$TMP_HTTP")
-        # Run httpx in background, save output to tmp file
-        (
-            "$HTTPX_BIN" -silent -title -status-code -u "$url" > "$TMP_HTTP" 2>&1 || true
-        ) &
+
+        run_httpx "$url" "$TMP_HTTP" &  # background job
         ((JOBS++))
         if (( JOBS >= MAX_JOBS )); then
             wait
@@ -290,9 +301,9 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
         fi
     done
 
-    wait
+    wait  # wait for remaining jobs
 
-    # Process HTTPX temp files in main shell so associative updates persist
+    # Process results in main shell
     for tmp in "${HTTPX_TMP_FILES[@]}"; do
         [[ ! -f "$tmp" ]] && continue
         while IFS= read -r line || [[ -n "$line" ]]; do
@@ -305,6 +316,7 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
 else
     printf '%b\n' "${YELLOW}[!] HTTPX skipped: no URLs discovered or HTTPX binary missing.${NC}"
 fi
+
 
 
 # ====================
