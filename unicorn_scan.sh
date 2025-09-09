@@ -261,7 +261,7 @@ print_httpx_banner
 
 # Prepare temp files for HTTPX jobs
 declare -a HTTPX_TMP_FILES=()
-if [[ ${#HTTP_URLS[@]} -gt 0 && -n "$HTTPX_BIN" && command -v "$HTTPX_BIN" &>/dev/null ]]; then
+if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_BIN" &>/dev/null; then
     printf '%b\n' "${GREEN}[*] Running HTTPX on discovered URLs...${NC}"
 
     MAX_JOBS=${MAX_JOBS:-10}
