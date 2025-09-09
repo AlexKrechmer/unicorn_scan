@@ -127,11 +127,11 @@ done
 # ASCII Banner
 # ====================
 print_banner() {
-    # Set color
-    printf '%b' "$TEAL"
+  # apply color BEFORE the ASCII block
+  printf '%b' "$TEAL"
 
-    # Print ASCII banner literally (heredoc quoted)
-    cat <<'EOF'
+  # quote the heredoc to prevent any shell expansion inside ASCII art
+  cat <<'EOF'
              _                                              
  /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ 
 / / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _` | '_ \
@@ -140,10 +140,8 @@ print_banner() {
                                   |_____|                  
 EOF
 
-    # Reset color
-    printf '%b\n' "$NC"
-}
-
+  # reset color AFTER the heredoc
+  printf '%b\n' "$NC"
 # Call it
 print_banner
 
@@ -156,9 +154,12 @@ TMP_FILES+=("$TMP_DIR")
 # ====================
 # Naabu Phase
 # ====================
-print_blue_banner() {
+print_naabu_banner() {
+    # Apply blue color
     printf '%b' "$BLUE"
-    cat <<EOF
+
+    # Print ASCII literally (no expansion)
+    cat <<'EOF'
 ====================================================
                   __       
   ___  ___ ____ _/ /  __ __
@@ -166,10 +167,13 @@ print_blue_banner() {
 /_//_/\_,_/\_,_/_.__/\_,_/ 
 ====================================================
 EOF
+
+    # Reset color
     printf '%b\n' "$NC"
 }
 
-print_blue_banner
+# Call the banner
+print_naabu_banner
 
 PORTS=""
 if [[ -n "$NAABU_BIN" ]]; then
@@ -192,8 +196,11 @@ fi
 # Nmap Phase
 # ====================
 print_yellow_banner() {
+    # set yellow before the banner
     printf '%b' "$YELLOW"
-    cat <<EOF
+
+    # QUOTED heredoc prevents shell expansion inside ASCII
+    cat <<'EOF'
 ====================================================
  .-----.--------.---.-.-----.
  |     |        |  _  |  _  |
@@ -201,9 +208,12 @@ print_yellow_banner() {
                       |__|   
 ====================================================
 EOF
+
+    # reset color afterwards
     printf '%b\n' "$NC"
 }
 
+# call the function
 print_yellow_banner
 if [[ -n "$PORTS" && -n "$NMAP_BIN" ]]; then
     NMAP_TMP="$TMP_DIR/nmap.out"
@@ -242,8 +252,11 @@ fi
 # HTTPX Phase
 # ====================
 print_httpx_banner() {
+    # Apply green color
     printf '%b' "$GREEN"
-    cat <<EOF
+
+    # Use quoted heredoc to prevent escape/variable expansion
+    cat <<'EOF'
 ====================================================
     __    __  __                      
    / /_  / /_/ /_____  _  __          
@@ -253,6 +266,8 @@ print_httpx_banner() {
              /_/                      
 ====================================================
 EOF
+
+    # Reset color
     printf '%b\n' "$NC"
 }
 
@@ -332,37 +347,109 @@ print_gobuster_banner
 # Ensure TMP_DIR exists
 mkdir -p "${TMP_DIR:-/tmp/unicorn_scan}"
 
-# Validate Gobuster binary
-if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
-    echo -e "${RED}[!] Gobuster binary not found. Skipping Gobuster phase.${NC}"
+# Validate Gobuster binary safely
+if [[ -z "$GOBUSTER_BIN" ]]; then
+    echo -e "${RED}[!] Gobuster binary not set. Skipping Gobuster phase.${NC}"
+elif ! command -v "$GOBUSTER_BIN" &>/dev/null; then
+    echo -e "${RED}[!] Gobuster not found in PATH. Skipping Gobuster phase.${NC}"
 elif [[ ${#HTTP_URLS[@]} -eq 0 ]]; then
     echo -e "${YELLOW}[!] Gobuster skipped: No URLs provided.${NC}"
 else
-    # Use provided wordlists
+    # Use the configured wordlists (only existing ones will be used)
     VALID_WORDLISTS=("$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL")
     echo -e "${PURPLE}[+] Starting Gobuster scans...${NC}"
 
-    # Temp files and job control
-    TMP_FILES=()
-    MAX_JOBS=5
+    # Build a normalized list of single URLs to scan (SCAN_URLS)
+    declare -a SCAN_URLS=()
+    declare -A SEEN_URL=()
+
+    for entry in "${HTTP_URLS[@]}"; do
+        # split on whitespace into tokens (restore IFS to space just for this read)
+        oldIFS="$IFS"; IFS=' ' read -r -a parts <<< "$entry"; IFS="$oldIFS"
+
+        if (( ${#parts[@]} == 0 )); then
+            continue
+        elif (( ${#parts[@]} == 1 )); then
+            candidate="${parts[0]}"
+            # ensure candidate has a scheme; if not, assume http
+            if [[ "$candidate" != *"://"* ]]; then
+                candidate="http://$candidate"
+            fi
+            # dedupe
+            if [[ -z "${SEEN_URL[$candidate]:-}" ]]; then
+                SCAN_URLS+=("$candidate"); SEEN_URL["$candidate"]=1
+            fi
+        else
+            # multiple tokens: first token is base (may include scheme and optional port/path),
+            # subsequent tokens are ports or full URLs
+            base="${parts[0]}"
+            if [[ "$base" != *"://"* ]]; then
+                base="http://$base"
+            fi
+            scheme="${base%%:*}"                     # e.g. "http" or "https"
+            hostport="${base#*://}"                  # e.g. "example.com:80/path"
+            hostport="${hostport%%/*}"               # strip any path => "example.com:80"
+            host="${hostport%%:*}"                   # host without port
+
+            for ((i=1;i<${#parts[@]};i++)); do
+                token="${parts[i]}"
+                # if token looks like a full URL, accept it
+                if [[ "$token" == *"://"* ]]; then
+                    candidate="$token"
+                    if [[ -z "${SEEN_URL[$candidate]:-}" ]]; then
+                        SCAN_URLS+=("$candidate"); SEEN_URL["$candidate"]=1
+                    fi
+                    continue
+                fi
+
+                # token may be "80", "80,443", "80:443" etc. split on commas/colons
+                tmp="${token//:/,}"
+                IFS=',' read -r -a ports <<< "$tmp"
+                for p in "${ports[@]}"; do
+                    # strip non-digits just in case
+                    p="${p//[!0-9]/}"
+                    [[ -z "$p" ]] && continue
+                    candidate="${scheme}://${host}:$p"
+                    if [[ -z "${SEEN_URL[$candidate]:-}" ]]; then
+                        SCAN_URLS+=("$candidate"); SEEN_URL["$candidate"]=1
+                    fi
+                done
+            done
+        fi
+    done
+
+    # If normalization produced nothing (edge case), fall back to original array
+    if (( ${#SCAN_URLS[@]} == 0 )); then
+        for u in "${HTTP_URLS[@]}"; do
+            # ensure scheme present
+            [[ "$u" != *"://"* ]] && u="http://$u"
+            if [[ -z "${SEEN_URL[$u]:-}" ]]; then SCAN_URLS+=("$u"); SEEN_URL["$u"]=1; fi
+        done
+    fi
+
+    # Now run Gobuster on each normalized URL × wordlist in parallel, writing to temp files
+    declare -a GOB_TMP_FILES=()
+    declare -A TMP_META=()   # tmpfile -> "url|wordlistname"
+    MAX_JOBS=${MAX_JOBS:-5}
     JOBS=0
 
-    for url in "${HTTP_URLS[@]}"; do
-        [[ -z "$url" ]] && continue
-
+    for url in "${SCAN_URLS[@]}"; do
         for wordlist in "${VALID_WORDLISTS[@]}"; do
             [[ ! -f "$wordlist" ]] && continue
 
-            TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | md5sum | awk '{print $1')}_$(basename "$wordlist")"
-            TMP_FILES+=("$TMP_GOB")
+            # safe md5 of the URL (no newline)
+            url_md5="$(printf '%s' "$url" | md5sum | cut -d' ' -f1)"
+            wordname="$(basename "$wordlist")"
+            TMP_GOB="$TMP_DIR/gobuster_${url_md5}_${wordname}"
+            GOB_TMP_FILES+=("$TMP_GOB")
+            TMP_META["$TMP_GOB"]="$url|$wordname"
+            TMP_FILES+=("$TMP_GOB")   # register for cleanup
 
-            {
-                WORDLIST_NAME=$(basename "$wordlist")
-                echo -e "${TEAL}[Gobuster] Scanning $url with $WORDLIST_NAME${NC}"
-
-                # Run Gobuster; output goes to temp file
-                "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q 2>/dev/null > "$TMP_GOB"
-            } &
+            (
+                echo -e "${TEAL}[Gobuster] Scanning $url with $wordname${NC}"
+                # run gobuster, capture all output into temp file; do not let failures kill the main script
+                "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q > "$TMP_GOB" 2>&1 || true
+            ) &
 
             ((JOBS++))
             if (( JOBS >= MAX_JOBS )); then
@@ -371,6 +458,23 @@ else
             fi
         done
     done
+
+    # Wait for background jobs to finish
+    wait
+
+    # Process temp files sequentially in the main shell so associative-array updates persist
+    for tmp in "${GOB_TMP_FILES[@]}"; do
+        [[ ! -f "$tmp" ]] && continue
+        meta="${TMP_META[$tmp]}"
+        # meta = "url|wordlistname"
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            echo -e "${TEAL}[Gobuster][${meta}] $line${NC}"
+            GOBUSTER_RESULTS["$meta"]+="$line"$'\n'
+        done < "$tmp"
+    done
+
+    echo -e "${PURPLE}[+] Gobuster phase completed.${NC}"
+fi
 
     wait  # Wait for remaining background jobs
 
@@ -395,8 +499,11 @@ fi
 # ====================
 # Nuclei Phase
 # ====================
-print_nmap_banner() {
-    printf "%b" "$RED"
+print_nuclei_banner() {
+    # Apply red color
+    printf '%b' "$RED"
+
+    # Use quoted heredoc so ASCII prints literally
     cat <<'EOF'
 ===================================================
                      .__         .__ 
@@ -407,11 +514,14 @@ print_nmap_banner() {
      \/            \/          \/    
 ===================================================
 EOF
-    printf "%b\n" "$NC"
+
+    # Reset color
+    printf '%b\n' "$NC"
 }
 
-# Call the Nmap banner when desired
-print_nmap_banner
+# Call the Nuclei banner when desired
+print_nuclei_banner
+
 
 echo -e "${ORANGE}==================== Nuclei Phase ====================${NC}"
 
