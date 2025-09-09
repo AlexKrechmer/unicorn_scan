@@ -248,18 +248,22 @@ fi
 # HTTPX Phase (safe: write to temp, then process in main shell)
 # ====================
 print_httpx_banner() {
-    printf '%b' "$GREEN"
+    # Status lines in color
+    printf '%b\n' "${GREEN}====================================================${NC}"
+    printf '%b\n' "${GREEN}[*] HTTPX Phase${NC}"
+    printf '%b\n' "${GREEN}====================================================${NC}"
+
+    # ASCII art without color codes for reliability
     cat <<'EOF'
-====================================================
     __    __  __                      
    / /_  / /_/ /_____  _  __          
   / __ \/ __/ __/ __ \| |/_/          
  / / / /_/ /_/ /_/ /  >  <            
 /_/ /_/\__/\__/ .___/_/|_|            
              /_/                      
-====================================================
 EOF
-    printf '%b\n' "$NC"
+
+    printf '%b\n' "${GREEN}====================================================${NC}"
 }
 print_httpx_banner
 
@@ -291,10 +295,7 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
     # Process HTTPX temp files in main shell so associative updates persist
     for tmp in "${HTTPX_TMP_FILES[@]}"; do
         [[ ! -f "$tmp" ]] && continue
-        # try to recover url by md5 => we stored mapping not necessary; instead parse from file name
-        # url_md5 is not directly human-friendly; store lines with tag
         while IFS= read -r line || [[ -n "$line" ]]; do
-            # Guarantee we print the line; keep HTTPX_RESULTS keyed by tmp filename
             HTTPX_RESULTS["$tmp"]+="$line"$'\n'
             printf '%b\n' "${GREEN}[HTTPX][$tmp] $line${NC}"
         done < "$tmp"
@@ -304,6 +305,7 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
 else
     printf '%b\n' "${YELLOW}[!] HTTPX skipped: no URLs discovered or HTTPX binary missing.${NC}"
 fi
+
 
 # ====================
 # Gobuster Phase (robust & uses wordlists)
