@@ -242,7 +242,6 @@ fi
 # HTTPX Phase
 # ====================
 print_httpx_banner() {
-    # Use printf with %b to interpret ANSI codes
     printf '%b' "$GREEN"
     cat <<EOF
 ====================================================
@@ -271,7 +270,6 @@ if [[ -n "$PORTS" ]]; then
         [[ "$p" == "443" || "$p" == "8443" || "$p" == "7443" ]] && proto="https"
 
         host="$TARGET"
-        # Append port if non-default
         [[ "$proto" == "http" && "$p" != "80" ]] && host="$TARGET:$p"
         [[ "$proto" == "https" && "$p" != "443" ]] && host="$TARGET:$p"
 
@@ -279,30 +277,37 @@ if [[ -n "$PORTS" ]]; then
     done
 fi
 
-# Check if HTTPX exists and URLs are available
-if [[ ${#HTTP_URLS[@]} -gt 0 && -n "$HTTPX_BIN" && command -v "$HTTPX_BIN" &>/dev/null ]]; then
-    echo -e "${GREEN}[*] Running HTTPX on discovered URLs...${NC}"
+# Fixed check for HTTPX binary and URLs
+if [[ ${#HTTP_URLS[@]} -gt 0 ]]; then
+    if [[ -n "$HTTPX_BIN" ]]; then
+        if command -v "$HTTPX_BIN" &>/dev/null; then
+            echo -e "${GREEN}[*] Running HTTPX on discovered URLs...${NC}"
 
-    for url in "${HTTP_URLS[@]}"; do
-        {
-            TMP_HTTP="$TMP_DIR/httpx_$(echo "$url" | md5sum | awk '{print $1}')"
-            TMP_FILES+=("$TMP_HTTP")
-            
-            # Corrected: -u for single URL
-            "$HTTPX_BIN" -silent -title -status-code -u "$url" \
-            | while read -r line; do
-                echo -e "${GREEN}[HTTPX][$url] $line${NC}"
-                HTTPX_RESULTS["$url"]+="$line"$'\n'
-            done > "$TMP_HTTP" 2>/dev/null
+            for url in "${HTTP_URLS[@]}"; do
+                {
+                    TMP_HTTP="$TMP_DIR/httpx_$(echo "$url" | md5sum | awk '{print $1}')"
+                    TMP_FILES+=("$TMP_HTTP")
 
-        } &
-    done
+                    # Run HTTPX
+                    "$HTTPX_BIN" -silent -title -status-code -u "$url" \
+                    | while read -r line; do
+                        echo -e "${GREEN}[HTTPX][$url] $line${NC}"
+                        HTTPX_RESULTS["$url"]+="$line"$'\n'
+                    done > "$TMP_HTTP" 2>/dev/null
 
-    # Wait for all parallel jobs to finish
-    wait
-    echo -e "${GREEN}[+] HTTPX phase complete.${NC}"
+                } &
+            done
+
+            wait
+            echo -e "${GREEN}[+] HTTPX phase complete.${NC}"
+        else
+            echo -e "${YELLOW}[!] HTTPX binary not found. Skipping HTTPX phase.${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[!] HTTPX_BIN variable empty. Skipping HTTPX phase.${NC}"
+    fi
 else
-    echo -e "${YELLOW}[!] HTTPX skipped: no URLs discovered or HTTPX binary missing.${NC}"
+    echo -e "${YELLOW}[!] No URLs discovered for HTTPX. Skipping phase.${NC}"
 fi
 # ====================
 # Gobuster Phase
