@@ -131,7 +131,7 @@ print_banner() {
     printf '%b' "$TEAL"
 
     # Print ASCII banner literally
-    cat <<'EOF'
+    cat <<EOF
              _                                              
  /\ /\ _ __ (_) ___ ___  _ __ _ __      ___  ___ __ _ _ __ 
 / / \ \ '_ \| |/ __/ _ \| '__| '_ \    / __|/ __/ _` | '_ \
@@ -158,7 +158,7 @@ TMP_FILES+=("$TMP_DIR")
 # ====================
 print_blue_banner() {
     printf '%b' "$BLUE"
-    cat <<'EOF'
+    cat <<EOF
 ====================================================
                   __       
   ___  ___ ____ _/ /  __ __
@@ -193,7 +193,7 @@ fi
 # ====================
 print_yellow_banner() {
     printf '%b' "$YELLOW"
-    cat <<'EOF'
+    cat <<EOF
 ====================================================
  .-----.--------.---.-.-----.
  |     |        |  _  |  _  |
@@ -243,7 +243,7 @@ fi
 # ====================
 print_httpx_banner() {
     printf '%b' "$GREEN"
-    cat <<'EOF'
+    cat <<EOF
 ====================================================
     __    __  __                      
    / /_  / /_/ /_____  _  __          
@@ -301,7 +301,7 @@ wait
 # ====================
 print_gobuster_banner() {
     printf '%b' "$ORANGE"
-    cat <<'EOF'
+    cat <<EOF
 ====================================================
   _____       _               _            
  |  __ \     | |             | |           
@@ -312,66 +312,79 @@ print_gobuster_banner() {
 ====================================================
 EOF
     printf '%b\n' "$NC"
-
-
 }
 
-    print_gobuster_banner
+print_gobuster_banner
+
+# Make sure TMP_DIR exists
+mkdir -p "${TMP_DIR:-/tmp/unicorn_scan}"
 
 # Check prerequisites
 if [[ -z "$GOBUSTER_BIN" ]] || ! command -v "$GOBUSTER_BIN" &>/dev/null; then
     echo -e "${RED}[!] Gobuster binary not found. Skipping Gobuster phase.${NC}"
-elif [[ ${#HTTP_URLS[@]} -eq 0 || ${#WORDLISTS[@]} -eq 0 ]]; then
-    echo -e "${YELLOW}[!] Gobuster skipped: No URLs or wordlists provided.${NC}"
+elif [[ ${#HTTP_URLS[@]} -eq 0 ]]; then
+    echo -e "${YELLOW}[!] Gobuster skipped: No URLs provided.${NC}"
 else
-    echo -e "${PURPLE}[+] Starting Gobuster scans...${NC}"
-
-    # Limit parallel jobs
-    MAX_JOBS=5
-    JOBS=0
-
-    for url in "${HTTP_URLS[@]}"; do
-        for wordlist in "${WORDLISTS[@]}"; do
-            {
-                WORDLIST_NAME=$(basename "$wordlist")
-                echo -e "${TEAL}[Gobuster] Scanning $url with $WORDLIST_NAME${NC}"
-
-                TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | md5sum | awk '{print $1}')_$WORDLIST_NAME"
-                TMP_FILES+=("$TMP_GOB")
-
-                "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q 2>/dev/null \
-                | while read -r line; do
-                    echo -e "${TEAL}[Gobuster][$url|$WORDLIST_NAME] $line${NC}"
-                    GOBUSTER_RESULTS["$url|$WORDLIST_NAME"]+="$line"$'\n'
-                done > "$TMP_GOB"
-
-            } &
-
-            ((JOBS++))
-            # Wait if max jobs reached
-            if (( JOBS >= MAX_JOBS )); then
-                wait
-                JOBS=0
-            fi
-        done
+    # Ensure wordlists exist
+    VALID_WORDLISTS=()
+    for wl in "$SMALL_WL" "$QUICKHIT_WL" "$MEDIUM_WL" "$COMMON_WL"; do
+        if [[ -f "$wl" ]]; then
+            VALID_WORDLISTS+=("$wl")
+        fi
     done
-    wait
-    echo -e "${PURPLE}[+] Gobuster phase completed.${NC}"
+
+    if [[ ${#VALID_WORDLISTS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}[!] Gobuster skipped: No valid wordlists found.${NC}"
+    else
+        echo -e "${PURPLE}[+] Starting Gobuster scans...${NC}"
+
+        # Limit parallel jobs
+        MAX_JOBS=5
+        JOBS=0
+
+        for url in "${HTTP_URLS[@]}"; do
+            for wordlist in "${VALID_WORDLISTS[@]}"; do
+                {
+                    WORDLIST_NAME=$(basename "$wordlist")
+                    echo -e "${TEAL}[Gobuster] Scanning $url with $WORDLIST_NAME${NC}"
+
+                    TMP_GOB="$TMP_DIR/gobuster_$(echo "$url" | md5sum | awk '{print $1}')_$WORDLIST_NAME"
+                    TMP_FILES+=("$TMP_GOB")
+
+                    "$GOBUSTER_BIN" dir -u "$url" -w "$wordlist" -t 30 -q 2>/dev/null \
+                    | while read -r line; do
+                        echo -e "${TEAL}[Gobuster][$url|$WORDLIST_NAME] $line${NC}"
+                        GOBUSTER_RESULTS["$url|$WORDLIST_NAME"]+="$line"$'\n'
+                    done > "$TMP_GOB"
+
+                } &
+
+                ((JOBS++))
+                # Wait if max jobs reached
+                if (( JOBS >= MAX_JOBS )); then
+                    wait
+                    JOBS=0
+                fi
+            done
+        done
+        wait
+        echo -e "${PURPLE}[+] Gobuster phase completed.${NC}"
+    fi
 fi
 # ====================
 # Nuclei Phase
 # ====================
 print_nmap_banner() {
     printf '%b' "$RED"
-    cat <<'EOF'
-====================================================
+    cat <<EOF
+===================================================
                      .__         .__ 
   ____  __ __   ____ |  |   ____ |__|
  /    \|  |  \_/ ___\|  | _/ __ \|  |
 |   |  \  |  /\  \___|  |_\  ___/|  |
 |___|  /____/  \___  >____/\___  >__|
      \/            \/          \/    
-====================================================
+===================================================
 EOF
     printf '%b\n' "$NC"
 }
