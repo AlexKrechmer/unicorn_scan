@@ -245,14 +245,15 @@ if [[ -n "$PORTS" ]]; then
 fi
 
 # ====================
-# HTTPX Phase (robust)
+# HTTPX Phase
 # ====================
 print_httpx_banner() {
+    # Colorized headers
     printf '%b\n' "${GREEN}====================================================${NC}"
     printf '%b\n' "${GREEN}[*] HTTPX Phase${NC}"
     printf '%b\n' "${GREEN}====================================================${NC}"
 
-    # ASCII art without colors inside heredoc
+    # ASCII art (no color codes inside)
     cat <<'EOF'
     __    __  __                      
    / /_  / /_/ /_____  _  __          
@@ -261,27 +262,23 @@ print_httpx_banner() {
 /_/ /_/\__/\__/ .___/_/|_|            
              /_/                      
 EOF
-
     printf '%b\n' "${GREEN}====================================================${NC}"
 }
 print_httpx_banner
 
-# Ensure TMP_DIR exists
+# Ensure temp dir exists
 mkdir -p "$TMP_DIR"
 
-# Safe HTTPX wrapper
-run_httpx() {
-    local url="$1"
-    local tmp="$2"
+# Debug: show URLs
+if [[ ${#HTTP_URLS[@]} -eq 0 ]]; then
+    printf '%b\n' "${YELLOW}[!] No HTTP URLs found to scan.${NC}"
+else
+    printf '%b\n' "${GREEN}[DEBUG] HTTP URLs: ${HTTP_URLS[*]}${NC}"
+fi
 
-    if ! "$HTTPX_BIN" -silent -title -status-code -u "$url" > "$tmp" 2>&1; then
-        echo -e "${YELLOW}[!] HTTPX failed for $url${NC}" >&2
-        return 1
-    fi
-}
-
-# Prepare temp files and jobs
+# Prepare temp files for HTTPX
 declare -a HTTPX_TMP_FILES=()
+
 if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_BIN" &>/dev/null; then
     printf '%b\n' "${GREEN}[*] Running HTTPX on discovered URLs...${NC}"
 
@@ -289,11 +286,15 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
     JOBS=0
 
     for url in "${HTTP_URLS[@]}"; do
-        TMP_HTTP="$TMP_DIR/httpx_$(printf '%s' "$url" | md5sum | cut -d' ' -f1)"
+        TMP_HTTP="$TMP_DIR/httpx_$(echo -n "$url" | md5sum | cut -d' ' -f1)"
         HTTPX_TMP_FILES+=("$TMP_HTTP")
         TMP_FILES+=("$TMP_HTTP")
 
-        run_httpx "$url" "$TMP_HTTP" &  # background job
+        # Run HTTPX in background for parallelism (optional)
+        (
+            "$HTTPX_BIN" -silent -title -status-code -u "$url" > "$TMP_HTTP" 2>&1 || true
+        ) &
+
         ((JOBS++))
         if (( JOBS >= MAX_JOBS )); then
             wait
@@ -301,9 +302,10 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
         fi
     done
 
-    wait  # wait for remaining jobs
+    # Wait for any remaining background jobs
+    wait
 
-    # Process results in main shell
+    # Process HTTPX results in main shell so associative array persists
     for tmp in "${HTTPX_TMP_FILES[@]}"; do
         [[ ! -f "$tmp" ]] && continue
         while IFS= read -r line || [[ -n "$line" ]]; do
@@ -314,7 +316,7 @@ if [[ ${#HTTP_URLS[@]} -gt 0 ]] && [[ -n "$HTTPX_BIN" ]] && command -v "$HTTPX_B
 
     printf '%b\n' "${GREEN}[+] HTTPX phase complete.${NC}"
 else
-    printf '%b\n' "${YELLOW}[!] HTTPX skipped: no URLs discovered or HTTPX binary missing.${NC}"
+    printf '%b\n' "${YELLOW}[!] HTTPX skipped: no URLs or HTTPX binary missing.${NC}"
 fi
 
 
